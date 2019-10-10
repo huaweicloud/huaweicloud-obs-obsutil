@@ -103,15 +103,16 @@ func (t *uploadPartTask) Run() interface{} {
 		return errAbort
 	}
 
-	input := &obs.UploadPartInput{}
-	input.Bucket = t.bucket
-	input.Key = t.key
-	input.UploadId = t.uploadId
 	fd, err := os.Open(t.fileUrl)
 	if err != nil {
 		return err
 	}
 	defer fd.Close()
+
+	input := &obs.UploadPartInput{}
+	input.Bucket = t.bucket
+	input.Key = t.key
+	input.UploadId = t.uploadId
 
 	if _, err = fd.Seek(t.offset, 0); err != nil {
 		return err
@@ -662,7 +663,6 @@ func (c *transferCommand) uploadBigFile(bucket, key, fileUrl string, fileStat os
 			}
 		}
 		uploadFileError = err
-		return
 	} else {
 		if err = os.Remove(checkpointFile); err != nil {
 			doLog(LEVEL_WARN, "Upload big file [%s] as key [%s] in the bucket [%s] successfully, but remove checkpoint file [%s] failed",
@@ -670,8 +670,9 @@ func (c *transferCommand) uploadBigFile(bucket, key, fileUrl string, fileStat os
 		}
 		requestId = _requestId
 		status = _status
-		return
 	}
+
+	return
 }
 
 func (c *transferCommand) uploadSmallFile(bucket, key, fileUrl string, fileStat os.FileInfo, metadata map[string]string, aclType obs.AclType, storageClassType obs.StorageClassType,
@@ -776,11 +777,8 @@ func (c *transferCommand) uploadSmallFile(bucket, key, fileUrl string, fileStat 
 	return
 }
 
-func (c *transferCommand) uploadFile(bucket, key, realArcPath, fileUrl string, fileStat os.FileInfo, metadata map[string]string, aclType obs.AclType, storageClassType obs.StorageClassType,
-	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
-	startUploadModifiedTime := fileStat.ModTime().Unix()
-	fileSize := fileStat.Size()
-	fileSizeStr := normalizeBytes(fileSize)
+func (c *transferCommand) beforeUploadFile(bucket, key, realArcPath, fileUrl string, fileStat os.FileInfo, startUploadModifiedTime, fileSize int64,
+	fileSizeStr string, barCh progress.SingleBarChan, batchFlag int, fastFailed error) int {
 
 	if fastFailed != nil {
 		c.failedLogger.doRecord("%s, %s --> obs://%s/%s, n/a, n/a, n/a, error message [%s], n/a", fileSizeStr, fileUrl, bucket, key, fastFailed.Error())
@@ -839,6 +837,10 @@ func (c *transferCommand) uploadFile(bucket, key, realArcPath, fileUrl string, f
 		}
 	}
 
+	return -1
+}
+
+func (c *transferCommand) dryRunUploadFile(bucket, key, fileUrl string, fileSize int64, fileSizeStr string, barCh progress.SingleBarChan, batchFlag int) int {
 	if c.dryRun {
 		if barCh != nil {
 			if fileSize <= 0 {
@@ -874,6 +876,79 @@ func (c *transferCommand) uploadFile(bucket, key, realArcPath, fileUrl string, f
 		return 1
 	}
 
+	return -1
+}
+
+func (c *transferCommand) afterUploadFile(bucket, key, fileUrl string, metadata map[string]string,
+	fileSize int64, fileSizeStr string, requestId, md5Value string, barCh progress.SingleBarChan) (uploadFileError error) {
+	if barCh != nil && fileSize <= 0 {
+		barCh.Send64(1)
+	}
+
+	if c.verifyMd5 && md5Value != "" {
+		if obsVersion, ok := c.bucketsVersionMap[bucket]; ok && obsVersion == OBS_VERSION_UNKNOWN {
+			warnMessage := fmt.Sprintf("Bucket [%s] cannot support setObjectMetadata interface, because of obs version check failed - so skip set object md5", bucket)
+			warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]", fileSizeStr, fileUrl, bucket, key, warnMessage)
+			c.recordWarnMessage(warnMessage, warnLoggerMessage)
+		} else if ok && obsVersion >= "3.0" {
+			if _, _err := c.setObjectMd5(bucket, key, "", md5Value, metadata); _err != nil {
+				_status, _code, _message, _requestId := getErrorInfo(_err)
+				warnMessage := fmt.Sprintf("Upload file [%s] as key [%s] in the bucket [%s] successfully - but set object md5 failed - status [%d] - error code [%s] - error message [%s] - request id [%s]",
+					fileUrl, key, bucket, _status, _code, _message, _requestId)
+				warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
+					fileSizeStr, fileUrl, bucket, key, warnMessage)
+				c.recordWarnMessage(warnMessage, warnLoggerMessage)
+			}
+		} else {
+			warnMessage := fmt.Sprintf("Bucket [%s] cannot support setObjectMetadata interface - so skip set object md5", bucket)
+			warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]", fileSizeStr, fileUrl, bucket, key, warnMessage)
+			c.recordWarnMessage(warnMessage, warnLoggerMessage)
+		}
+	} else if c.verifyLength {
+		if metaContext, err := getObjectMetadata(bucket, key, ""); err == nil {
+			if metaContext.Size != fileSize {
+				doLog(LEVEL_ERROR, "Verify length failed after uploading file [%s], local length [%d] remote length [%d], will try to delete uploaded key", fileUrl, fileSize, metaContext.Size)
+				if _requestId, _err := c.deleteObject(bucket, key, ""); _err == nil {
+					doLog(LEVEL_INFO, "Delete key [%s] in the bucket [%s] successfully, request id [%s]", key, bucket, _requestId)
+				} else {
+					_status, _code, _message, _requestId := getErrorInfo(_err)
+					warnMessage := fmt.Sprintf("Delete key [%s] in the bucket [%s] failed - status [%d] - error code [%s] - error message [%s] - request id [%s]", key, bucket, _status, _code, _message, _requestId)
+					warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
+						fileSizeStr, fileUrl, bucket, key, warnMessage)
+					c.recordWarnMessage(warnMessage, warnLoggerMessage)
+				}
+				uploadFileError = &errorWrapper{
+					err:       &verifyLengthError{msg: fmt.Sprintf("Verify length failed after uploading file [%s], local length [%d] remote length [%d]", fileUrl, fileSize, metaContext.Size)},
+					requestId: requestId,
+				}
+			}
+		} else {
+			warnMessage := fmt.Sprintf("Upload file [%s] as key [%s] in the bucket [%s] successfully - but can not verify length - %s",
+				fileUrl, key, bucket, err.Error())
+			warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
+				fileSizeStr, fileUrl, bucket, key, warnMessage)
+			c.recordWarnMessage(warnMessage, warnLoggerMessage)
+		}
+	}
+
+	return
+}
+
+func (c *transferCommand) uploadFile(bucket, key, realArcPath, fileUrl string, fileStat os.FileInfo, metadata map[string]string, aclType obs.AclType, storageClassType obs.StorageClassType,
+	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
+
+	startUploadModifiedTime := fileStat.ModTime().Unix()
+	fileSize := fileStat.Size()
+	fileSizeStr := normalizeBytes(fileSize)
+
+	if ret := c.beforeUploadFile(bucket, key, realArcPath, fileUrl, fileStat, startUploadModifiedTime, fileSize, fileSizeStr, barCh, batchFlag, fastFailed); ret >= 0 {
+		return ret
+	}
+
+	if ret := c.dryRunUploadFile(bucket, key, fileUrl, fileSize, fileSizeStr, barCh, batchFlag); ret >= 0 {
+		return ret
+	}
+
 	var uploadFileError error
 	var requestId string
 	var md5Value string
@@ -887,55 +962,7 @@ func (c *transferCommand) uploadFile(bucket, key, realArcPath, fileUrl string, f
 	}
 
 	if uploadFileError == nil {
-		if barCh != nil && fileSize <= 0 {
-			barCh.Send64(1)
-		}
-
-		if c.verifyMd5 && md5Value != "" {
-			if obsVersion, ok := c.bucketsVersionMap[bucket]; ok && obsVersion == OBS_VERSION_UNKNOWN {
-				warnMessage := fmt.Sprintf("Bucket [%s] cannot support setObjectMetadata interface, because of obs version check failed - so skip set object md5", bucket)
-				warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]", fileSizeStr, fileUrl, bucket, key, warnMessage)
-				c.recordWarnMessage(warnMessage, warnLoggerMessage)
-			} else if ok && obsVersion >= "3.0" {
-				if _, _err := c.setObjectMd5(bucket, key, "", md5Value, metadata); _err != nil {
-					_status, _code, _message, _requestId := getErrorInfo(_err)
-					warnMessage := fmt.Sprintf("Upload file [%s] as key [%s] in the bucket [%s] successfully - but set object md5 failed - status [%d] - error code [%s] - error message [%s] - request id [%s]",
-						fileUrl, key, bucket, _status, _code, _message, _requestId)
-					warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
-						fileSizeStr, fileUrl, bucket, key, warnMessage)
-					c.recordWarnMessage(warnMessage, warnLoggerMessage)
-				}
-			} else {
-				warnMessage := fmt.Sprintf("Bucket [%s] cannot support setObjectMetadata interface - so skip set object md5", bucket)
-				warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]", fileSizeStr, fileUrl, bucket, key, warnMessage)
-				c.recordWarnMessage(warnMessage, warnLoggerMessage)
-			}
-		} else if c.verifyLength {
-			if metaContext, err := getObjectMetadata(bucket, key, ""); err == nil {
-				if metaContext.Size != fileSize {
-					doLog(LEVEL_ERROR, "Verify length failed after uploading file [%s], local length [%d] remote length [%d], will try to delete uploaded key", fileUrl, fileSize, metaContext.Size)
-					if _requestId, _err := c.deleteObject(bucket, key, ""); _err == nil {
-						doLog(LEVEL_INFO, "Delete key [%s] in the bucket [%s] successfully, request id [%s]", key, bucket, _requestId)
-					} else {
-						_status, _code, _message, _requestId := getErrorInfo(_err)
-						warnMessage := fmt.Sprintf("Delete key [%s] in the bucket [%s] failed - status [%d] - error code [%s] - error message [%s] - request id [%s]", key, bucket, _status, _code, _message, _requestId)
-						warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
-							fileSizeStr, fileUrl, bucket, key, warnMessage)
-						c.recordWarnMessage(warnMessage, warnLoggerMessage)
-					}
-					uploadFileError = &errorWrapper{
-						err:       &verifyLengthError{msg: fmt.Sprintf("Verify length failed after uploading file [%s], local length [%d] remote length [%d]", fileUrl, fileSize, metaContext.Size)},
-						requestId: requestId,
-					}
-				}
-			} else {
-				warnMessage := fmt.Sprintf("Upload file [%s] as key [%s] in the bucket [%s] successfully - but can not verify length - %s",
-					fileUrl, key, bucket, err.Error())
-				warnLoggerMessage := fmt.Sprintf("%s, %s --> obs://%s/%s, warn message [%s]",
-					fileSizeStr, fileUrl, bucket, key, warnMessage)
-				c.recordWarnMessage(warnMessage, warnLoggerMessage)
-			}
-		}
+		uploadFileError = c.afterUploadFile(bucket, key, fileUrl, metadata, fileSize, fileSizeStr, requestId, md5Value, barCh)
 	}
 
 	if md5Value == "" {

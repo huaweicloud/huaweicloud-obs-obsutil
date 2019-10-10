@@ -144,7 +144,7 @@ func (ch *DefaultSingleBarChan) Send64(delta int64) {
 	}
 }
 
-type NilSingleBarChan struct {}
+type NilSingleBarChan struct{}
 
 func NewNilSingleBarChan() SingleBarChan {
 	return &NilSingleBarChan{}

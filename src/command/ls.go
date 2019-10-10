@@ -135,7 +135,7 @@ func (c *lsCommand) listBuckets() error {
 
 			} else {
 				format := "%-25s%-25s%-15s%-15s"
-				printf(format, "Bucket", "CreationDate", "Location", "Type")
+				printf(format, "Bucket", "CreationDate", "Location", "BucketType")
 				for _, val := range output.Buckets {
 					bucketName := "obs://" + val.Name
 					bucketType := c_object
