@@ -1159,9 +1159,9 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 				}
 				if _info.IsDir() {
 					c.folderMapLock.Lock()
-					pathToCheck := assist.NormalizeFilePath(path) + "/"
+					pathToCheck := folder + "-" + assist.NormalizeFilePath(path) + "/"
 					if previousFolder, ok := c.folderMap[_path]; ok && strings.Index(previousFolder, pathToCheck) >= 0 {
-						panicErr := fmt.Errorf("the symbolic-link folder [%s] --> [%s] result in a circle with folder [%s]", path, _path, previousFolder)
+						panicErr := fmt.Errorf("the symbolic-link folder [%s] --> [%s] result in a circle with folder [%s], path to check is [%s]", path, _path, previousFolder, pathToCheck)
 						c.recordPrepareFailed(bucket, key, path, totalBytesForProgress, totalFiles, panicErr.Error())
 						c.folderMapLock.Unlock()
 						if config["panicForSymbolicLinkCircle"] == c_true {
@@ -1178,7 +1178,7 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 					c.folderMap[_path] = pathToCheck
 					c.folderMapLock.Unlock()
 
-					if config["memoryEconomicalScanForUpload"] == c_true || c.link {
+					if config["memoryEconomicalScanForUpload"] == c_true {
 						return filepath.Walk(_path, c.getWalkFunc(bucket, key, arcPath, _path, true, metadata,
 							aclType, storageClassType, pool, barCh, limiter, totalBytes, totalBytesForProgress, totalFiles))
 					}

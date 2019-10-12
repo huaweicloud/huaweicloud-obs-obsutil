@@ -271,6 +271,7 @@ func GetRealPath(path string) (realPath string, realStat os.FileInfo, err error)
 		if err != nil {
 			return
 		}
+		count++
 	}
 
 	//fixbug

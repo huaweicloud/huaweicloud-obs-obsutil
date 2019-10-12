@@ -378,12 +378,13 @@ func initConfig() command {
 	c.additional = true
 
 	c.define = func() {
-		c.flagSet.StringVar(&c.endpoint, "e", c_na, "")
 		if assist.IsHec() {
+		    c.flagSet.StringVar(&c.endpoint, "e", c_na, "")
 			c.flagSet.StringVar(&c.ak, "i", c_na, "")
 			c.flagSet.StringVar(&c.sk, "k", c_na, "")
 			c.flagSet.StringVar(&c.token, "t", c_na, "")
 		} else {
+		    c.endpoint = c_na
 			c.ak = c_na
 			c.sk = c_na
 			c.token = c_na
@@ -488,10 +489,10 @@ func initConfig() command {
 		printf("%2s%s", "", "-interactive")
 		printf("%4s%s", "", p.Sprintf("update the configuration file through interactive mode"))
 		printf("")
-		printf("%2s%s", "", "-e=xxx")
-		printf("%4s%s", "", p.Sprintf("endpoint"))
-		printf("")
 		if isHec {
+		    printf("%2s%s", "", "-e=xxx")
+		    printf("%4s%s", "", p.Sprintf("endpoint"))
+		    printf("")
 			printf("%2s%s", "", "-i=xxx")
 			printf("%4s%s", "", p.Sprintf("access key ID"))
 			printf("")

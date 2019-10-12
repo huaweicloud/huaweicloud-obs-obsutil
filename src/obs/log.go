@@ -94,14 +94,14 @@ func (lw *loggerWrapper) rotate() {
 			lw.index = 1
 		}
 		renamePath := lw.fullPath + "." + IntToString(lw.index)
-		if stat, _ := os.Stat(renamePath); stat != nil {
-			if err := os.Remove(renamePath); err != nil {
-				panic(err)
+		if _stat, _ := os.Stat(renamePath); _stat != nil {
+			if _err := os.Remove(renamePath); _err != nil {
+				panic(_err)
 			}
 		}
 
-		if err := os.Rename(lw.fullPath, renamePath); err != nil {
-			panic(err)
+		if _err := os.Rename(lw.fullPath, renamePath); _err != nil {
+			panic(_err)
 		}
 		if chmodErr := os.Chmod(renamePath, 0400); chmodErr != nil {
 			// ignore change mode error

@@ -351,11 +351,12 @@ func (c *cpCommand) doDownload(url1, url2 string) error {
 		}
 		return nil
 	}
-	if err = c.ensureBucket(bucket); err != nil {
-		printError(err)
-		doLog(LEVEL_ERROR, err.Error())
+	if _err := c.ensureBucket(bucket); _err != nil {
+		printError(_err)
+		doLog(LEVEL_ERROR, _err.Error())
 		return assist.ErrCheckBucketStatus
 	}
+
 	if err != nil {
 		if err = assist.MkdirAll(url2, os.ModePerm); err != nil {
 			printError(err)
@@ -372,12 +373,12 @@ func (c *cpCommand) doDownload(url1, url2 string) error {
 		return assist.ErrInvalidArgs
 	}
 
-	if err = c.ensureOutputDirectory(); err != nil {
-		printError(err)
+	if _err := c.ensureOutputDirectory(); _err != nil {
+		printError(_err)
 		return assist.ErrInvalidArgs
 	}
-	if err = c.startLogger(true); err != nil {
-		printError(err)
+	if _err := c.startLogger(true); _err != nil {
+		printError(_err)
 		return assist.ErrInvalidArgs
 	}
 	defer c.endLogger()

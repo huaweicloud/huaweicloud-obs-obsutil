@@ -162,9 +162,9 @@ func (c *syncCommand) doDownload(url1, url2 string) error {
 		return assist.ErrInvalidArgs
 	}
 
-	if err = c.ensureBucket(bucket); err != nil {
-		printError(err)
-		doLog(LEVEL_ERROR, err.Error())
+	if _err := c.ensureBucket(bucket); _err != nil {
+		printError(_err)
+		doLog(LEVEL_ERROR, _err.Error())
 		return assist.ErrCheckBucketStatus
 	}
 
@@ -187,13 +187,13 @@ func (c *syncCommand) doDownload(url1, url2 string) error {
 	}
 
 	dir := keyOrDir
-	if err = c.ensureOutputDirectory(); err != nil {
-		printError(err)
+	if _err := c.ensureOutputDirectory(); _err != nil {
+		printError(_err)
 		return assist.ErrInvalidArgs
 	}
 	c.printParams(true, true, false, true)
-	if err = c.startLogger(true); err != nil {
-		printError(err)
+	if _err := c.startLogger(true); _err != nil {
+		printError(_err)
 		return assist.ErrInvalidArgs
 	}
 	doLog(LEVEL_INFO, "Download objects from cloud folder [%s] in the bucket [%s] to local folder [%s] ", dir, bucket, url2)

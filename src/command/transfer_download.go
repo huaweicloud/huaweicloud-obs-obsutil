@@ -69,6 +69,7 @@ type downloadPartTask struct {
 	limiter     *ratelimit.RateLimiter
 	objectInfo  ObjectInfo
 	parsedUrl   *url.URL
+	checkStatus bool
 }
 
 type downloadPartResult struct {
@@ -116,6 +117,15 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 	}
 
 	defer output.Body.Close()
+
+	if t.checkStatus && output.StatusCode != 206 {
+		downloadPartError = &errorWrapper{
+			err:       fmt.Errorf("Invalid status code to download a part, expected [%d], actual [%d]", 206, output.StatusCode),
+			requestId: output.RequestId,
+		}
+		noRepeatable = true
+		return
+	}
 
 	_readBufferIoSize, transErr := assist.TranslateToInt64(config["readBufferIoSize"])
 	if transErr != nil {
@@ -716,6 +726,7 @@ func (c *parallelContextCommand) downloadBigFileConcurrent(dfc *DownloadFileChec
 	var requestId atomic.Value
 	lock := new(sync.Mutex)
 
+	checkStatus := len(dfc.DownloadParts) > 1
 	for _, downloadPart := range dfc.DownloadParts {
 		if atomic.LoadInt32(&abort) == 1 {
 			break
@@ -734,6 +745,7 @@ func (c *parallelContextCommand) downloadBigFileConcurrent(dfc *DownloadFileChec
 				limiter:     limiter,
 				objectInfo:  dfc.ObjectInfo,
 				parsedUrl:   parsedUrl,
+				checkStatus: checkStatus,
 			}
 			pool.ExecuteFunc(func() interface{} {
 				ret := task.Run()
