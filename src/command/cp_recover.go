@@ -218,14 +218,17 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 				}
 			}
 
-			if !c.matchLastModifiedTime(info.ModTime()) {
+			if !c.matchUploadTimeRange(info) {
 				return
 			}
 
 			if !c.force && !confirm(fmt.Sprintf("Do you want upload folder [%s] to bucket [%s] ? Please input (y/n) to confirm:", path, bucket)) {
 				return
 			}
-
+			// modify by w00468571 wanghongbao, if the disableDirObject is true the dir will not upload as a object
+			if c.disableDirObject {
+				return
+			}
 			atomic.AddInt64(totalAmountsForProgress, 1)
 			atomic.AddInt64(totalTasks, 1)
 			pool.ExecuteFunc(func() interface{} {
@@ -240,7 +243,7 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 				return
 			}
 
-			if !c.matchLastModifiedTime(info.ModTime()) {
+			if !c.matchUploadTimeRange(info) {
 				return
 			}
 
@@ -286,7 +289,10 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 			fastFailed = fmt.Errorf("Cannot download the specified key [%s] in the bucket [%s]", key, bucket)
 		}
 
-		fileStat, _ := os.Stat(fileUrl)
+		fileStat, statErr := os.Stat(fileUrl)
+		if statErr != nil {
+			doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+		}
 		if isObsFolder(key) {
 
 			if c.matchFolder {

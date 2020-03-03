@@ -65,12 +65,10 @@ func (c *shareCommand) prepareAccessUrl(authorizationCode string, args []string)
 		}
 	}
 
-	var accessUrl string
-	if _accessUrl, _err := c.checkAuthorizationAndAccess(authorizationCode, c.accessCode); _err != nil {
+	accessUrl, _err := c.checkAuthorizationAndAccess(authorizationCode, c.accessCode)
+	if _err != nil {
 		err = _err
 		return
-	} else {
-		accessUrl = _accessUrl
 	}
 
 	parsedUrl, err = url.Parse(accessUrl)
@@ -86,9 +84,9 @@ func (c *shareCommand) prepareAccessUrl(authorizationCode string, args []string)
 
 func (c *shareCommand) printAuthorizedPrefix(prefix string) {
 	if prefix == "" {
-		printf("The authorized is empty, all the content of bucket can be accessed")
+		printf("The authorized prefix is empty, all the content of bucket can be accessed\n")
 	} else {
-		printf("The authorized prefix is [%s]", prefix)
+		printf("The authorized prefix is [%s]\n", prefix)
 	}
 }
 

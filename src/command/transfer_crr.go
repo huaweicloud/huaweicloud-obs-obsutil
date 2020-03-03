@@ -499,29 +499,30 @@ func (c *transferCommand) copyBigObjectCrr(srcBucket, srcKey, versionId, dstBuck
 		defer h.End()
 	}
 
-	if _status, _requestId, err := c.completeMultipartUploadForCopyObject(cfc); err != nil {
-		if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode >= 400 && obsError.StatusCode < 500 &&
+	_status, _requestId, completeErr := c.completeMultipartUploadForCopyObject(cfc)
+	if completeErr != nil {
+		if obsError, ok := completeErr.(obs.ObsError); ok && obsError.StatusCode >= 400 && obsError.StatusCode < 500 &&
 			strings.Index(config["abortHttpStatusForResumableTasks"], assist.IntToString(obsError.StatusCode)) >= 0 {
 			if isContinue, _err := c.abortMultipartUpload(cfc.DestinationBucket, cfc.DestinationKey, cfc.UploadId); !isContinue {
 				copyObjectError = _err
 				return
 			}
-			if err = os.Remove(checkpointFile); err != nil {
-				copyObjectError = err
+			if _err := os.Remove(checkpointFile); _err != nil {
+				copyObjectError = _err
 				return
 			}
 		}
-		copyObjectError = err
-		return
-	} else {
-		if err = os.Remove(checkpointFile); err != nil {
-			doLog(LEVEL_WARN, "Copy key [%s] in the bucket [%s] to key [%s] in the bucket [%s] successfully, but remove checkpoint file [%s] failed",
-				cfc.SourceKey, cfc.SourceBucket, cfc.DestinationKey, cfc.DestinationBucket, checkpointFile)
-		}
-		requestId = _requestId
-		status = _status
+		copyObjectError = completeErr
 		return
 	}
+	if _err := os.Remove(checkpointFile); _err != nil {
+		doLog(LEVEL_WARN, "Copy key [%s] in the bucket [%s] to key [%s] in the bucket [%s] successfully, but remove checkpoint file [%s] failed",
+			cfc.SourceKey, cfc.SourceBucket, cfc.DestinationKey, cfc.DestinationBucket, checkpointFile)
+	}
+	requestId = _requestId
+	status = _status
+	return
+
 }
 
 func (c *transferCommand) copySmallObjectCrrWithRetry(srcBucket, srcKey, versionId, dstBucket, dstKey string, srcMetaContext *MetaContext,

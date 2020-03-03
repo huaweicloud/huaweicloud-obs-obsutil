@@ -548,10 +548,10 @@ func initRm() command {
 		printf("%2s%s", "", "obsutil rm obs://bucket [-f] [-config=xxx]")
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil rm obs://bucket/key [-f] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil rm obs://bucket/key [-f] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil rm obs://bucket/[prefix] -r [-j=1] [-f] [-v] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil rm obs://bucket/[prefix] -r [-j=1] [-f] [-v] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -579,6 +579,7 @@ func initRm() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

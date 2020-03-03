@@ -14,6 +14,7 @@ package repeatable
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"obs"
 )
@@ -22,11 +23,29 @@ var errUnsupportReset = errors.New("UnsupportResetError")
 
 type Reader struct {
 	fd         io.Reader
-	markOffset int64
 	reader     *bufio.Reader
+	markOffset int64
+	bufferSize int
+}
+
+type ReaderV2 struct {
+	Reader
 }
 
 func (r *Reader) Read(p []byte) (n int, err error) {
+	return r.reader.Read(p)
+}
+
+func (r *ReaderV2) Read(p []byte) (n int, err error) {
+	defer func() {
+		e := recover()
+		if _err, ok := e.(error); ok {
+			err = _err
+		} else if e != nil {
+			err = fmt.Errorf("Unexpect error, please collect the logs and contact our support, %v", e)
+		}
+	}()
+
 	return r.reader.Read(p)
 }
 
@@ -39,15 +58,26 @@ func (r *Reader) Reset() error {
 	}
 
 	if err == nil {
-		r.reader.Reset(r.fd)
+		//fix bug, need rebuild bufio rather than reset it
+		r.reader = bufio.NewReaderSize(r.fd, r.bufferSize)
 	}
 
 	return err
 }
 
-func NewReaderSize(fd io.Reader, bufferSize int, markOffset int64) *Reader {
+func NewReaderSize(fd io.Reader, bufferSize int, markOffset int64, ignoreReadPanic bool) io.Reader {
 	if markOffset < 0 {
 		markOffset = 0
 	}
-	return &Reader{fd: fd, reader: bufio.NewReaderSize(fd, bufferSize), markOffset: markOffset}
+
+	if ignoreReadPanic {
+		r := &ReaderV2{}
+		r.fd = fd
+		r.reader = bufio.NewReaderSize(fd, bufferSize)
+		r.markOffset = markOffset
+		r.bufferSize = bufferSize
+		return r
+	}
+
+	return &Reader{fd: fd, reader: bufio.NewReaderSize(fd, bufferSize), markOffset: markOffset, bufferSize: bufferSize}
 }

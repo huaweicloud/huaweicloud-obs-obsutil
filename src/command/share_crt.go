@@ -15,7 +15,10 @@ import (
 	"assist"
 	"command/i18n"
 	"fmt"
+	"io/ioutil"
 	"obs"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -36,6 +39,7 @@ type shareCrtCommand struct {
 	cloudUrlCommand
 	accessCode     string
 	validityPeriod string
+	downloadUrl    string
 }
 
 func (c *shareCrtCommand) getBucketVersion(bucket string) string {
@@ -92,6 +96,7 @@ func initShareCrt() command {
 	c.define = func() {
 		c.flagSet.StringVar(&c.accessCode, "ac", "", "")
 		c.flagSet.StringVar(&c.validityPeriod, "vp", "1d", "")
+		c.flagSet.StringVar(&c.downloadUrl, "dst", "", "")
 	}
 
 	c.action = func() error {
@@ -172,14 +177,46 @@ func initShareCrt() command {
 			return assist.ErrExecuting
 		}
 
-		printf("Authorization Code:")
-		printf("%s?token=%s", shareConsoleUrl, token)
+		result := make([]string, 0, 6)
+		result = append(result, "Authorization Code:")
+		result = append(result, fmt.Sprintf("%s?token=%s", shareConsoleUrl, token))
+		result = append(result, "\nAccess Code:")
+		result = append(result, c.accessCode)
+		result = append(result, "\nValid Until:")
+		result = append(result, fmt.Sprintf("%s", expiration.Local().Format(RFC1123_FORMAT)))
 
-		printf("\nAccess Code:")
-		fmt.Println(c.accessCode)
+		if c.downloadUrl == "" {
+			printf(strings.Join(result, "\n"))
+			return nil
+		}
 
-		printf("\nValid Until:")
-		printf("%s", expiration.Local().Format(RFC1123_FORMAT))
+		downloadUrl := assist.NormalizeFilePath(c.downloadUrl)
+		stat, err := os.Lstat(downloadUrl)
+		if err == nil {
+			if stat.IsDir() {
+				downloadUrl = assist.NormalizeFilePath(downloadUrl + "/result.txt")
+			}
+		} else if strings.HasSuffix(c.downloadUrl, "/") {
+			if merr := assist.MkdirAll(downloadUrl, os.ModePerm); merr != nil {
+				printf("Error: Try to create folder [%s] failed, %s", downloadUrl, merr.Error())
+				return assist.ErrExecuting
+			}
+			downloadUrl = assist.NormalizeFilePath(downloadUrl + "/result.txt")
+		} else {
+			parent := filepath.Dir(downloadUrl)
+			if merr := assist.MkdirAll(parent, os.ModePerm); merr != nil {
+				printf("Error: Try to create folder [%s] failed, %s", parent, merr.Error())
+				return assist.ErrExecuting
+			}
+		}
+
+		if werr := ioutil.WriteFile(downloadUrl, assist.StringToBytes(strings.Join(result, "\n")), 0666); werr != nil {
+			printf("Error: Try to write result to [%s] failed, %s", downloadUrl, werr.Error())
+			return assist.ErrExecuting
+		}
+
+		printf("The result is generated to [%s]", downloadUrl)
+
 		return nil
 	}
 
@@ -189,7 +226,7 @@ func initShareCrt() command {
 		printf("%2s%s", "", p.Sprintf("create authorization code for sharing"))
 		printf("")
 		p.Printf("Syntax:")
-		printf("%2s%s", "", "obsutil create-share obs://bucket[/prefix] [-ac=xxx] [-vp=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil create-share obs://bucket[/prefix] [-ac=xxx] [-vp=xxx] [-dst=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -199,9 +236,13 @@ func initShareCrt() command {
 		printf("%2s%s", "", "-vp=xxx")
 		printf("%4s%s", "", p.Sprintf("the validity period of authorization code, the default value is 1 day"))
 		printf("")
+		printf("%2s%s", "", "-dst=xxx")
+		printf("%4s%s", "", p.Sprintf("the download url to which the result is generated"))
+		printf("")
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

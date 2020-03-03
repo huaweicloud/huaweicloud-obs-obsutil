@@ -33,11 +33,14 @@ type shareCpCommand struct {
 	objectKey string
 }
 
-func (c *shareCpCommand) constructGetObjectUrl(parsedUrl *url.URL, key string) string {
-	signedUrl := constructCommonUrl(parsedUrl, key)
-	commonUrl := strings.Join(signedUrl, "")
-	doLog(LEVEL_INFO, "The common url for getting object is [%s]", commonUrl)
-	return commonUrl
+func (c *shareCpCommand) constructGetObjectUrl(requestUrl interface{}, key string) string {
+	if parsedUrl, ok := requestUrl.(*url.URL); ok {
+		signedUrl := constructCommonUrl(parsedUrl, key)
+		commonUrl := strings.Join(signedUrl, "")
+		doLog(LEVEL_INFO, "The common url for getting object is [%s]", commonUrl)
+		return commonUrl
+	}
+	return requestUrl.(string)
 }
 
 func (c *shareCpCommand) constructListObjectsUrlWithOutSignature(parsedUrl *url.URL, prefix string) string {
@@ -51,18 +54,33 @@ func (c *shareCpCommand) constructListObjectsUrlWithOutSignature(parsedUrl *url.
 	return strings.Join(signedUrl, "")
 }
 
-func (c *shareCpCommand) constructGetObjectUrlWithOutSignature(parsedUrl *url.URL, key string) string {
-	signedUrl := make([]string, 0, 4)
-	signedUrl = append(signedUrl, parsedUrl.Scheme)
-	signedUrl = append(signedUrl, "://")
-	signedUrl = append(signedUrl, parsedUrl.Host)
-	signedUrl = append(signedUrl, fmt.Sprintf("/%s", key))
-	return strings.Join(signedUrl, "")
+func (c *shareCpCommand) constructGetObjectUrlWithOutSignature(requestUrl interface{}, key string) string {
+	var parsedUrl *url.URL
+	if _parsedUrl, ok := requestUrl.(*url.URL); ok {
+		parsedUrl = _parsedUrl
+	} else if _parsedUrl, err := url.Parse(requestUrl.(string)); err == nil {
+		parsedUrl = _parsedUrl
+	}
+
+	if parsedUrl != nil {
+		signedUrl := make([]string, 0, 4)
+		signedUrl = append(signedUrl, parsedUrl.Scheme)
+		signedUrl = append(signedUrl, "://")
+		signedUrl = append(signedUrl, parsedUrl.Host)
+		signedUrl = append(signedUrl, fmt.Sprintf("/%s", key))
+		return strings.Join(signedUrl, "")
+	}
+	return requestUrl.(string)
 }
 
-func (c *shareCpCommand) getObjectMetadata(parsedUrl *url.URL, key string) (*MetaContext, error) {
-	signedUrl := c.constructGetObjectUrl(parsedUrl, key)
-	requestHeaders := map[string][]string{"Host": []string{parsedUrl.Host}}
+func (c *shareCpCommand) getObjectMetadata(requestUrl interface{}, key string) (*MetaContext, error) {
+	signedUrl := c.constructGetObjectUrl(requestUrl, key)
+
+	requestHeaders := make(map[string][]string, 1)
+	if parsedUrl, ok := requestUrl.(*url.URL); ok {
+		requestHeaders["Host"] = []string{parsedUrl.Host}
+	}
+
 	output, err := obsClient.GetObjectWithSignedUrl(signedUrl, requestHeaders)
 	if err == nil {
 		defer output.Body.Close()
@@ -77,9 +95,9 @@ func (c *shareCpCommand) getObjectMetadata(parsedUrl *url.URL, key string) (*Met
 	return nil, err
 }
 
-func (c *shareCpCommand) checkSourceChangedForDownload(parsedUrl *url.URL, key string, originLastModified int64, abort *int32) error {
+func (c *shareCpCommand) checkSourceChangedForDownload(requestUrl interface{}, key string, originLastModified int64, abort *int32) error {
 	if config["checkSourceChange"] == c_true {
-		if metaContext, err := c.getObjectMetadata(parsedUrl, key); err != nil {
+		if metaContext, err := c.getObjectMetadata(requestUrl, key); err != nil {
 			if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode == 404 {
 				if abort != nil {
 					atomic.CompareAndSwapInt32(abort, 0, 1)
@@ -96,11 +114,11 @@ func (c *shareCpCommand) checkSourceChangedForDownload(parsedUrl *url.URL, key s
 	return nil
 }
 
-func (c *shareCpCommand) downloadBigFile(parsedUrl *url.URL, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
+func (c *shareCpCommand) downloadBigFile(requestUrl interface{}, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int) (requestId string, status int, md5Value string, downloadFileError error) {
 
 	if metaContext.Size == 0 {
-		return c.downloadSmallFileWithRetry(parsedUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
+		return c.downloadSmallFileWithRetry(requestUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
 	}
 
 	_downloadCloudUrl := downloadCloudUrl
@@ -169,7 +187,7 @@ func (c *shareCpCommand) downloadBigFile(parsedUrl *url.URL, downloadCloudUrl, k
 
 	var abort int32
 	var metadata map[string]string
-	abort, status, requestId, metadata, downloadFileError = c.downloadBigFileConcurrent(dfc, checkpointFile, barChFlag, barCh, limiter, parsedUrl)
+	abort, status, requestId, metadata, downloadFileError = c.downloadBigFileConcurrent(dfc, checkpointFile, barChFlag, barCh, limiter, requestUrl)
 
 	if barChFlag {
 		barCh.WaitToFinished()
@@ -247,12 +265,18 @@ func (c *shareCpCommand) downloadBigFile(parsedUrl *url.URL, downloadCloudUrl, k
 	return
 }
 
-func (c *shareCpCommand) downloadSmallFile(parsedUrl *url.URL, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
+func (c *shareCpCommand) downloadSmallFile(requestUrl interface{}, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter) (requestId string, status int, md5Value string,
 	noRepeatable bool, readed int64, downloadFileError error) {
 
-	signedUrl := c.constructGetObjectUrl(parsedUrl, key)
-	requestHeaders := map[string][]string{"Host": []string{parsedUrl.Host}}
+	requestHeaders := make(map[string][]string, 1)
+	var signedUrl string
+	if parsedUrl, ok := requestUrl.(*url.URL); ok {
+		requestHeaders["Host"] = []string{parsedUrl.Host}
+		signedUrl = c.constructGetObjectUrl(parsedUrl, key)
+	} else {
+		signedUrl = requestUrl.(string)
+	}
 
 	output, err := obsClient.GetObjectWithSignedUrl(signedUrl, requestHeaders)
 	if err != nil {
@@ -326,7 +350,9 @@ func (c *shareCpCommand) downloadSmallFile(parsedUrl *url.URL, downloadCloudUrl,
 				readed += int64(n)
 				slice := p[0:n]
 				wcnt, werr := bufWriter.Write(slice)
-				md5Writer.Write(slice)
+				if _, writeErr := md5Writer.Write(slice); writeErr != nil {
+					doLog(LEVEL_WARN, "Write md5 value failed, %s", writeErr.Error())
+				}
 				if werr != nil {
 					downloadFileError = &errorWrapper{
 						err:       werr,
@@ -384,7 +410,7 @@ func (c *shareCpCommand) downloadSmallFile(parsedUrl *url.URL, downloadCloudUrl,
 
 	}
 
-	if changedErr := c.checkSourceChangedForDownload(parsedUrl, key, metaContext.LastModified.Unix(), nil); changedErr != nil {
+	if changedErr := c.checkSourceChangedForDownload(requestUrl, key, metaContext.LastModified.Unix(), nil); changedErr != nil {
 		downloadFileError = &errorWrapper{
 			err:       changedErr,
 			requestId: output.RequestId,
@@ -406,11 +432,18 @@ func (c *shareCpCommand) downloadSmallFile(parsedUrl *url.URL, downloadCloudUrl,
 	}
 
 	requestId = output.RequestId
+
+	if requestId == "" {
+		if ret, ok := output.ResponseHeaders["x-obs-request-id"]; ok {
+			requestId = ret[0]
+		}
+	}
+
 	status = output.StatusCode
 	return
 }
 
-func (c *shareCpCommand) downloadSmallFileWithRetry(parsedUrl *url.URL, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
+func (c *shareCpCommand) downloadSmallFileWithRetry(requestUrl interface{}, downloadCloudUrl, key, fileUrl string, fileStat os.FileInfo, metaContext *MetaContext,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter) (requestId string, status int, md5Value string, downloadFileError error) {
 
 	objectSize := metaContext.Size
@@ -430,7 +463,7 @@ func (c *shareCpCommand) downloadSmallFileWithRetry(parsedUrl *url.URL, download
 	var readed int64
 	maxRetryCount := assist.StringToInt(config["maxRetryCount"], defaultMaxRetryCount)
 	for {
-		requestId, status, md5Value, noRepeatable, readed, downloadFileError = c.downloadSmallFile(parsedUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
+		requestId, status, md5Value, noRepeatable, readed, downloadFileError = c.downloadSmallFile(requestUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
 		if downloadFileError == nil || noRepeatable || retryCount >= maxRetryCount {
 			break
 		}
@@ -453,20 +486,20 @@ func (c *shareCpCommand) downloadSmallFileWithRetry(parsedUrl *url.URL, download
 	return
 }
 
-func (c *shareCpCommand) downloadFile(parsedUrl *url.URL, key, fileUrl string, fileStat os.FileInfo,
+func (c *shareCpCommand) downloadFile(requestUrl interface{}, key, fileUrl string, fileStat os.FileInfo,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
-	metaContext, metaErr := c.getObjectMetadata(parsedUrl, key)
-	return c.downloadFileWithMetaContext(parsedUrl, key, metaContext, metaErr, fileUrl, fileStat, barCh, limiter, batchFlag, fastFailed)
+	metaContext, metaErr := c.getObjectMetadata(requestUrl, key)
+	return c.downloadFileWithMetaContext(requestUrl, key, metaContext, metaErr, fileUrl, fileStat, barCh, limiter, batchFlag, fastFailed)
 }
 
-func (c *shareCpCommand) downloadFileWithMetaContext(parsedUrl *url.URL, key string, metaContext *MetaContext, metaErr error, fileUrl string, fileStat os.FileInfo,
+func (c *shareCpCommand) downloadFileWithMetaContext(requestUrl interface{}, key string, metaContext *MetaContext, metaErr error, fileUrl string, fileStat os.FileInfo,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
 	objectSizeStr := c_na
 	if metaContext != nil {
 		objectSizeStr = normalizeBytes(metaContext.Size)
 	}
 
-	downloadCloudUrl := c.constructGetObjectUrlWithOutSignature(parsedUrl, key)
+	downloadCloudUrl := c.constructGetObjectUrlWithOutSignature(requestUrl, key)
 
 	if fastFailed != nil {
 		c.failedLogger.doRecord("%s, %s --> %s, n/a, n/a, n/a, error message [%s], n/a", objectSizeStr, downloadCloudUrl, fileUrl, fastFailed.Error())
@@ -500,13 +533,14 @@ func (c *shareCpCommand) downloadFileWithMetaContext(parsedUrl *url.URL, key str
 					printf("%s, %s --> %s, skip since the source is not changed", objectSizeStr, downloadCloudUrl, fileUrl)
 				}
 
-				if batchFlag >= 1 {
-					c.failedLogger.doRecord("%s, %s --> %s, n/a, n/a, n/a, error message [skip since the status of source is unknown], n/a", objectSizeStr, downloadCloudUrl, fileUrl)
-				}
-				if batchFlag != 2 {
-					printf("%s --> %s, skip since the status of source is unknown", downloadCloudUrl, fileUrl)
-				}
 				return 2
+			}
+
+			if batchFlag >= 1 {
+				c.failedLogger.doRecord("%s, %s --> %s, n/a, n/a, n/a, error message [skip since the status of source is unknown], n/a", objectSizeStr, downloadCloudUrl, fileUrl)
+			}
+			if batchFlag != 2 {
+				printf("%s --> %s, skip since the status of source is unknown", downloadCloudUrl, fileUrl)
 			}
 
 			return 0
@@ -560,9 +594,9 @@ func (c *shareCpCommand) downloadFileWithMetaContext(parsedUrl *url.URL, key str
 			objectSize := metaContext.Size
 			addCostFlag = true
 			if objectSize >= c.bigfileThreshold {
-				requestId, status, md5Value, downloadFileError = c.downloadBigFile(parsedUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter, batchFlag)
+				requestId, status, md5Value, downloadFileError = c.downloadBigFile(requestUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter, batchFlag)
 			} else {
-				requestId, status, md5Value, downloadFileError = c.downloadSmallFileWithRetry(parsedUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
+				requestId, status, md5Value, downloadFileError = c.downloadSmallFileWithRetry(requestUrl, downloadCloudUrl, key, fileUrl, fileStat, metaContext, barCh, limiter)
 			}
 
 			if _, ok := downloadFileError.(*verifyMd5Error); ok {
@@ -653,7 +687,7 @@ func (c *shareCpCommand) constructListObjectsUrl(parsedUrl *url.URL, prefix stri
 		signedUrl = append(signedUrl, fmt.Sprintf("%s=%s&", "prefix", url.QueryEscape(prefix)))
 	}
 
-	signedUrl = append(signedUrl, fmt.Sprintf("%s=%d", "max-keys", defaultListMaxKeys))
+	signedUrl = append(signedUrl, fmt.Sprintf("%s=%d&", "max-keys", defaultListMaxKeys))
 	commonUrl := strings.Join(signedUrl, "")
 	doLog(LEVEL_INFO, "The common url for listing objects is [%s]", commonUrl)
 	return commonUrl
@@ -688,10 +722,11 @@ func (c *shareCpCommand) submitDownloadTask(parsedUrl *url.URL, listCloudUrl, di
 		signedUrl = append(signedUrl, commonUrl)
 
 		if marker != "" {
-			signedUrl = append(signedUrl, fmt.Sprintf("%s=%s&", "marker", url.QueryEscape(marker)))
+			signedUrl = append(signedUrl, fmt.Sprintf("%s=%s", "marker", url.QueryEscape(marker)))
 		}
 
 		requestUrl := strings.Join(signedUrl, "")
+
 		output, err := obsClient.ListObjectsWithSignedUrl(requestUrl, requestHeaders)
 		if err != nil {
 			hasListError = err
@@ -719,7 +754,10 @@ func (c *shareCpCommand) submitDownloadTask(parsedUrl *url.URL, listCloudUrl, di
 			}
 
 			fileUrl := assist.NormalizeFilePath(folder + "/" + fileName)
-			fileStat, _ := os.Stat(fileUrl)
+			fileStat, statErr := os.Stat(fileUrl)
+			if statErr != nil {
+				doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+			}
 			if isObsFolder(key) {
 
 				if c.matchFolder {
@@ -853,7 +891,7 @@ func (c *shareCpCommand) downloadDir(parsedUrl *url.URL, dir, folder string, fol
 func initShareCp() command {
 	c := &shareCpCommand{}
 	c.key = "share-cp"
-	c.usage = c_share_usage
+	c.usage = c_share_cp_usage
 	c.description = "download objects using authorization code and access code"
 	c.skipCheckAkSk = true
 
@@ -912,7 +950,9 @@ func initShareCp() command {
 			c.printAuthorizedPrefix(allowedPrefix)
 		}()
 
-		if allowedPrefix != "" && !strings.HasPrefix(c.objectKey, allowedPrefix) {
+		if c.objectKey == "" && c.recursive {
+			c.objectKey = allowedPrefix
+		} else if allowedPrefix != "" && !strings.HasPrefix(c.objectKey, allowedPrefix) {
 			printf("Error: Invalid key [%s], must start with [%s]", c.objectKey, allowedPrefix)
 			return assist.ErrInvalidArgs
 		}
@@ -1012,16 +1052,16 @@ func initShareCp() command {
 		printf("%2s%s", "", p.Sprintf("download objects using authorization code and access code"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil share-cp authorization_code file_url|folder_url -key=xxx [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil share-cp authorization_code file_url|folder_url -key=xxx [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil share-cp file://authorization_code_file_url file_url|folder_url -key=xxx [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil share-cp file://authorization_code_file_url file_url|folder_url -key=xxx [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil share-cp authorization_code folder_url -r [-key=xxx] [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil share-cp authorization_code folder_url -r [-key=xxx] [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 4:")
-		printf("%2s%s", "", "obsutil share-cp file://authorization_code_file_url folder_url -r [-key=xxx] [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil share-cp file://authorization_code_file_url folder_url -r [-key=xxx] [-ac=xxx] [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -1091,6 +1131,7 @@ func initShareCp() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

@@ -30,23 +30,21 @@ type ReaderWrapper struct {
 }
 
 func (rw *ReaderWrapper) Read(p []byte) (n int, err error) {
-	if rw.TotalCount < 0 {
-		return rw.Reader.Read(p)
-	}
-
 	if rw.TotalCount == 0 {
-		return
+		return 0, io.EOF
 	}
-
 	n, err = rw.Reader.Read(p)
-	readedOnce := int64(n)
-	if remainCount := rw.TotalCount - rw.ReadedCount; remainCount > readedOnce {
-		rw.ReadedCount += readedOnce
-		return n, err
-	} else {
+	if rw.TotalCount > 0 {
+		readedOnce := int64(n)
+		remainCount := rw.TotalCount - rw.ReadedCount
+		if remainCount > readedOnce {
+			rw.ReadedCount += readedOnce
+			return
+		}
 		rw.ReadedCount += remainCount
 		return int(remainCount), io.EOF
 	}
+	return
 }
 
 type CheckSumReader struct {

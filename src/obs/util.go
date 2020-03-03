@@ -85,19 +85,25 @@ func FormatUtcToRfc1123(t time.Time) string {
 
 func Md5(value []byte) []byte {
 	m := md5.New()
-	m.Write(value)
+	if _, writeErr := m.Write(value); writeErr != nil {
+		doLog(LEVEL_WARN, "Md5 write failed: %v", writeErr)
+	}
 	return m.Sum(nil)
 }
 
 func HmacSha1(key, value []byte) []byte {
 	mac := hmac.New(sha1.New, key)
-	mac.Write(value)
+	if _, writeErr := mac.Write(value); writeErr != nil {
+		doLog(LEVEL_WARN, "HmacSha1 write failed: %v", writeErr)
+	}
 	return mac.Sum(nil)
 }
 
 func HmacSha256(key, value []byte) []byte {
 	mac := hmac.New(sha256.New, key)
-	mac.Write(value)
+	if _, writeErr := mac.Write(value); writeErr != nil {
+		doLog(LEVEL_WARN, "HmacSha256 write failed: %v", writeErr)
+	}
 	return mac.Sum(nil)
 }
 
@@ -119,7 +125,9 @@ func Base64Md5(value []byte) string {
 
 func Sha256Hash(value []byte) []byte {
 	hash := sha256.New()
-	hash.Write(value)
+	if _, writeHashErr := hash.Write(value); writeHashErr != nil {
+		doLog(LEVEL_WARN, "Hash write failed: %v", writeHashErr)
+	}
 	return hash.Sum(nil)
 }
 
@@ -306,7 +314,10 @@ func GetAuthorization(ak, sk, method, bucketName, objectKey, queryUrl string, he
 	if signature == "v4" {
 		conf.signature = SignatureV4
 		requestUrl, canonicalizedUrl := conf.formatUrls(bucketName, objectKey, params, false)
-		parsedRequestUrl, _ := url.Parse(requestUrl)
+		parsedRequestUrl, parseErr := url.Parse(requestUrl)
+		if parseErr != nil {
+			doLog(LEVEL_WARN, "Parse url failed, %s", parseErr.Error())
+		}
 		headerKeys := strings.Split(signedHeaders, ";")
 		_headers := make(map[string][]string, len(headerKeys))
 		for _, headerKey := range headerKeys {
@@ -380,7 +391,10 @@ func getTemporaryAuthorization(ak, sk, method, bucketName, objectKey, signature 
 		ret[PARAM_SIGNEDHEADERS_AMZ_CAMEL] = signedHeaders
 
 		requestUrl, canonicalizedUrl := conf.formatUrls(bucketName, objectKey, params, false)
-		parsedRequestUrl, _ := url.Parse(requestUrl)
+		parsedRequestUrl, parseErr := url.Parse(requestUrl)
+		if parseErr != nil {
+			doLog(LEVEL_WARN, "Parse url string failed, %s", parseErr.Error())
+		}
 		stringToSign := getV4StringToSign(method, canonicalizedUrl, parsedRequestUrl.RawQuery, scope, longDate, UNSIGNED_PAYLOAD, strings.Split(signedHeaders, ";"), headers)
 		ret[PARAM_SIGNATURE_AMZ_CAMEL] = UrlEncode(getSignature(stringToSign, sk, region, shortDate), false)
 	} else if signature == "v2" {

@@ -49,7 +49,10 @@ func (obsClient ObsClient) doAuthTemporary(method, bucketName, objectKey, policy
 
 	if sh.AK != "" && sh.SK != "" {
 		if isV4 {
-			date, _ := time.Parse(RFC1123_FORMAT, headers[HEADER_DATE_CAMEL][0])
+			date, parseDateFormatErr := time.Parse(RFC1123_FORMAT, headers[HEADER_DATE_CAMEL][0])
+			if parseDateFormatErr != nil {
+				doLog(LEVEL_WARN, "Parse date format failed, %s", parseDateFormatErr.Error())
+			}
 			delete(headers, HEADER_DATE_CAMEL)
 			shortDate := date.Format(SHORT_DATE_FORMAT)
 			longDate := date.Format(LONG_DATE_FORMAT)
@@ -64,7 +67,11 @@ func (obsClient ObsClient) doAuthTemporary(method, bucketName, objectKey, policy
 			params[PARAM_SIGNEDHEADERS_AMZ_CAMEL] = strings.Join(signedHeaders, ";")
 
 			requestUrl, canonicalizedUrl = obsClient.conf.formatUrls(bucketName, objectKey, params, true)
-			parsedRequestUrl, _ = url.Parse(requestUrl)
+			var parseErr error
+			parsedRequestUrl, parseErr = url.Parse(requestUrl)
+			if parseErr != nil {
+				doLog(LEVEL_WARN, "Parse url format failed, %s", parseErr.Error())
+			}
 			stringToSign := getV4StringToSign(method, canonicalizedUrl, parsedRequestUrl.RawQuery, scope, longDate, UNSIGNED_PAYLOAD, signedHeaders, _headers)
 			signature := getSignature(stringToSign, sh.SK, obsClient.conf.region, shortDate)
 
@@ -72,7 +79,10 @@ func (obsClient ObsClient) doAuthTemporary(method, bucketName, objectKey, policy
 
 		} else {
 			originDate := headers[HEADER_DATE_CAMEL][0]
-			date, _ := time.Parse(RFC1123_FORMAT, originDate)
+			date, parseErr := time.Parse(RFC1123_FORMAT, originDate)
+			if parseErr != nil {
+				doLog(LEVEL_WARN, "Parse date format failed, %s", parseErr.Error())
+			}
 			expires += date.Unix()
 
 			if policy == "" {

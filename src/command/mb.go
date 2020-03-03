@@ -63,23 +63,23 @@ func initMb() command {
 			input.Location = c.location
 		}
 
-		if aclType, succeed := getBucketAclType(c.acl); !succeed {
+		aclType, succeed := getBucketAclType(c.acl)
+		if !succeed {
 			return assist.ErrInvalidArgs
-		} else {
-			input.ACL = aclType
 		}
+		input.ACL = aclType
 
-		if storageClassType, succeed := getStorageClassType(c.sc); !succeed {
+		storageClassType, succeed := getStorageClassType(c.sc)
+		if !succeed {
 			return assist.ErrInvalidArgs
-		} else {
-			input.StorageClass = storageClassType
 		}
+		input.StorageClass = storageClassType
 
-		if availableZone, succeed := getAvailableZoneType(c.az); !succeed {
+		availableZone, succeed := getAvailableZoneType(c.az)
+		if !succeed {
 			return assist.ErrInvalidArgs
-		} else {
-			input.AvailableZone = availableZone
 		}
+		input.AvailableZone = availableZone
 
 		var output *obs.BaseModel
 		if c.fs {
@@ -107,7 +107,7 @@ func initMb() command {
 		printf("%2s%s", "", p.Sprintf("create a bucket with the specified parameters"))
 		printf("")
 		p.Printf("Syntax:")
-		printf("%2s%s", "", "obsutil mb obs://bucket [-fs] [-az=xxx] [-acl=xxx] [-sc=xxx] [-location=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil mb obs://bucket [-fs] [-az=xxx] [-acl=xxx] [-sc=xxx] [-location=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -131,6 +131,7 @@ func initMb() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

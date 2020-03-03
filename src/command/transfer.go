@@ -106,6 +106,8 @@ func (c *transferCommand) defineBasic() {
 	c.flagSet.BoolVar(&c.link, "link", false, "")
 	c.flagSet.BoolVar(&c.forceRecord, "fr", false, "")
 	c.flagSet.BoolVar(&c.crr, "crr", false, "")
+	c.flagSet.BoolVar(&c.at, "at", false, "")
+	c.flagSet.BoolVar(&c.disableDirObject, "disableDirObject", false, "") //disableDirObject
 	c.flagSet.BoolVar(&c.matchFolder, "mf", false, "")
 	c.flagSet.IntVar(&c.jobs, "j", 0, "")
 	c.flagSet.IntVar(&c.parallel, "p", 0, "")
@@ -242,11 +244,19 @@ func (c *transferCommand) setObjectMd5(bucket, key, versionId, md5Value string, 
 	input.Key = key
 	input.VersionId = versionId
 	input.MetadataDirective = obs.ReplaceMetadataNew
+
+	var inputMetadata map[string]string
 	if metadata == nil {
-		metadata = make(map[string]string, 1)
+		inputMetadata = make(map[string]string, 1)
+	} else {
+		inputMetadata = make(map[string]string, len(metadata))
+		for k, v := range metadata {
+			inputMetadata[k] = v
+		}
 	}
-	metadata[checkSumKey] = md5Value
-	input.Metadata = metadata
+
+	inputMetadata[checkSumKey] = md5Value
+	input.Metadata = inputMetadata
 	output, err := obsClient.SetObjectMetadata(input)
 	if err == nil {
 		return output.RequestId, nil
@@ -645,21 +655,21 @@ func (c *parallelContextCommand) autoSelectPartSize(totalSize int64, mode cpMode
 
 func (c *transferCommand) checkParams() (aclType obs.AclType, storageType obs.StorageClassType, metadata map[string]string, flag bool) {
 	if c.acl != "" {
-		if _aclType, ok := objectAclType[c.acl]; !ok {
+		_aclType, ok := objectAclType[c.acl]
+		if !ok {
 			printf("Error: Invalid acl [%s], possible values are:[private|public-read|public-read-write|bucket-owner-full-control]", c.acl)
 			return
-		} else {
-			aclType = _aclType
 		}
+		aclType = _aclType
 	}
 
 	if c.sc != "" {
-		if _storageClassType, ok := storageClassType[c.sc]; !ok {
+		_storageClassType, ok := storageClassType[c.sc]
+		if !ok {
 			printf("Error: Invalid sc [%s], possible values are:[standard|warm|cold]", c.sc)
 			return
-		} else {
-			storageType = _storageClassType
 		}
+		storageType = _storageClassType
 	}
 
 	if c.metadata != "" {

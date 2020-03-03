@@ -478,13 +478,13 @@ func initChattri() command {
 		printf("%2s%s\n", "", p.Sprintf("set bucket or object properties"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil chattri obs://bucket [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket/key [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil chattri obs://bucket/key [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket/[prefix] -r [-f] [-v] [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-o=xxx] [-j=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil chattri obs://bucket/[prefix] -r [-f] [-v] [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -521,6 +521,7 @@ func initChattri() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

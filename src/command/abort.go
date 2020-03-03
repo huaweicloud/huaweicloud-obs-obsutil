@@ -171,10 +171,10 @@ func initAbort() command {
 		printf("%2s%s\n", "", p.Sprintf("abort multipart uploads"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil abort obs://bucket/key -u=xxx [-f] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil abort obs://bucket/key -u=xxx [-f] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil abort obs://bucket/[prefix] -r [-f] [-o=xxx] [-j=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil abort obs://bucket/[prefix] -r [-f] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -199,6 +199,7 @@ func initAbort() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

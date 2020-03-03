@@ -738,18 +738,18 @@ func (rw *readerWrapper) Read(p []byte) (n int, err error) {
 	if rw.totalCount == 0 {
 		return 0, io.EOF
 	}
+	n, err = rw.reader.Read(p)
 	if rw.totalCount > 0 {
-		n, err = rw.reader.Read(p)
 		readedOnce := int64(n)
-		if remainCount := rw.totalCount - rw.readedCount; remainCount > readedOnce {
+		remainCount := rw.totalCount - rw.readedCount
+		if remainCount > readedOnce {
 			rw.readedCount += readedOnce
-			return n, err
-		} else {
-			rw.readedCount += remainCount
-			return int(remainCount), io.EOF
+			return
 		}
+		rw.readedCount += remainCount
+		return int(remainCount), io.EOF
 	}
-	return rw.reader.Read(p)
+	return
 }
 
 type fileReaderWrapper struct {

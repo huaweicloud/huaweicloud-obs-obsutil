@@ -42,6 +42,9 @@ func (m messageBuilderCn) buildMessage(printers map[language.Tag]*PrinterWrapper
 	m.setShareLsStrings()
 	m.setShareCpStrings()
 	m.setShareCrtStrings()
+	m.setCatStrings()
+	m.setHashStrings()
+	m.setDirectDownloadStrings()
 }
 
 func (messageBuilderCn) setCommonStrings() {
@@ -203,7 +206,9 @@ func (messageBuilderCn) setCpStrings() {
 
 	message.SetString(language.Chinese, "upload the actual path of the symbolic-link file/folder", "上传软链接文件/文件夹指向的真实路径")
 	message.SetString(language.Chinese, "the archive dir, used to archive the successful uploaded file(s)", "上传文件成功后的归档路径")
-	message.SetString(language.Chinese, "the time range, between which the objects will be uploaded, downloaded or copied", "上传/下载/复制时的时间段匹配模式")
+	message.SetString(language.Chinese, "the files whose latest access time falls into the time range (-timeRange option) will be uploaded", "上传文件夹中文件的最后访问时间满足timeRange选项的文件列表")
+	message.SetString(language.Chinese, "the folder will not be uploaded as a object", "上传时候文件夹本身不会作为单独一个对象上传")
+	message.SetString(language.Chinese, "the time range for last modified time, between which the objects will be uploaded, downloaded or copied", "上传/下载/复制时文件最后修改时间的时间段匹配模式")
 	message.SetString(language.Chinese, "the temp file dir, used to save temporary files during the objects are downloading", "下载时保存临时文件的文件夹")
 	message.SetString(language.Chinese, "multi-source upload mode. Possible values are [1|2]. 1 indicates the source URL is a list of file names separated by commas.2 indicates the source URL is a list file", "开启多文件/文件夹上传模式，如果该值为1则代表上传的URL是一组文件列表（以逗号分隔）；如果该值为2则代表上传的URL是一个包含文件列表的文件。支持的值：[1|2]")
 	message.SetString(language.Chinese, "copy the source object(s) through the client-side cross region replication mode", "复制时使用客户端跨区域复制模式")
@@ -289,5 +294,18 @@ func (messageBuilderCn) setShareCpStrings() {
 func (messageBuilderCn) setShareCrtStrings() {
 	message.SetString(language.Chinese, "create authorization code for sharing", "创建目录分享的授权码")
 	message.SetString(language.Chinese, "the validity period of authorization code, the default value is 1 day", "授权码的有效期，默认为1天")
+	message.SetString(language.Chinese, "the download url to which the result is generated", "生成的授权码的保存路径")
+}
 
+func (messageBuilderCn) setCatStrings() {
+	message.SetString(language.Chinese, "view the content of a text object in a bucket", "查看桶内文本类型对象的内容")
+}
+
+func (messageBuilderCn) setHashStrings() {
+	message.SetString(language.Chinese, "caculate the md5 or crc64 hash code of a local file", "使用crc64或md5加密算法计算本地文件的校验值")
+	message.SetString(language.Chinese, "the encryption algorithm type, possible values are [md5|crc64], the default value is md5", "加密算法类型，支持的值：[md5|crc64]，默认为md5")
+}
+
+func (messageBuilderCn) setDirectDownloadStrings() {
+	message.SetString(language.Chinese, "download an object directly using the specified resource url", "使用指定的资源链接支持下载对象")
 }

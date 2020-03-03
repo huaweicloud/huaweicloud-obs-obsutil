@@ -572,9 +572,8 @@ func (c *transferCommand) doRename(request MoveRequestInput, barCh progress.Sing
 						requestId = _output.RequestId
 					}
 					return
-				} else {
-					doLogError(newFolderErr, LEVEL_DEBUG, fmt.Sprintf("Try to create new folder [%s] failed", newFolderInput.Key))
 				}
+				doLogError(newFolderErr, LEVEL_DEBUG, fmt.Sprintf("Try to create new folder [%s] failed", newFolderInput.Key))
 			}
 		}
 		renameError = err
@@ -625,11 +624,10 @@ func (c *mvCommand) movePosixDir(moveRequestInput MoveRequestInput) error {
 		doLog(LEVEL_DEBUG, "Move successfully, %s, obs://%s/%s --> obs://%s/%s, cost [%d], status [%d], request id [%s]",
 			moveRequestInput.src.bucket, moveRequestInput.src.key, moveRequestInput.dst.bucket, moveRequestInput.dst.key, cost, status, requestId)
 		return nil
-	} else {
-		logError(renameFolderError, LEVEL_ERROR, fmt.Sprintf("\nMove failed, obs://%s/%s --> obs://%s/%s, cost [%d]",
-			moveRequestInput.src.bucket, moveRequestInput.src.key, moveRequestInput.dst.bucket, moveRequestInput.dst.key, cost))
-		return assist.ErrExecuting
 	}
+	logError(renameFolderError, LEVEL_ERROR, fmt.Sprintf("\nMove failed, obs://%s/%s --> obs://%s/%s, cost [%d]",
+		moveRequestInput.src.bucket, moveRequestInput.src.key, moveRequestInput.dst.bucket, moveRequestInput.dst.key, cost))
+	return assist.ErrExecuting
 }
 
 func initMv() command {
@@ -863,10 +861,10 @@ func initMv() command {
 		printf("%2s%s", "", p.Sprintf("move objects"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil mv obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil mv obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil mv obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-cpd=xxx] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil mv obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-cpd=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -933,6 +931,7 @@ func initMv() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 	return c
 }

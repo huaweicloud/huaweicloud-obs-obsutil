@@ -624,13 +624,13 @@ func initLs() command {
 		printf("%2s%s", "", p.Sprintf("list buckets or objects/multipart uploads in a bucket"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil ls [-s] [-sc] [-j=1] [-limit=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil ls [-s] [-sc] [-j=1] [-limit=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] [-marker=xxx] [-versionIdMarker=xxx] [-bf=xxx] [-limit=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] [-marker=xxx] [-versionIdMarker=xxx] [-bf=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] -m [-a] [-uploadIdMarker=xxx] [-marker=xxx] [-versionIdMarker=xxx] [-limit=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] -m [-a] [-uploadIdMarker=xxx] [-marker=xxx] [-versionIdMarker=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -673,6 +673,7 @@ func initLs() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 	return c
 }

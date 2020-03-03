@@ -271,7 +271,9 @@ func (obsClient ObsClient) doHttpWithSignedUrlInternal(action, method string, si
 
 		if i != maxRetryCount {
 			if resp != nil {
-				resp.Body.Close()
+				if closeRespErr := resp.Body.Close(); closeRespErr != nil {
+					doLog(LEVEL_WARN, "Close response failed, %s", closeRespErr.Error())
+				}
 				resp = nil
 			}
 			doLog(LEVEL_WARN, "Failed to send request with reason:%v and will try again", msg)
@@ -401,7 +403,6 @@ func (obsClient ObsClient) doHttp(ctx context.Context, method, bucketName, objec
 				return nil, err
 			}
 		}
-
 		req, err := http.NewRequest(method, requestUrl, _data)
 		if err != nil {
 			return nil, err
@@ -460,6 +461,7 @@ func (obsClient ObsClient) doHttp(ctx context.Context, method, bucketName, objec
 		} else {
 			doLog(LEVEL_DEBUG, "Response headers: %v", resp.Header)
 			if resp.StatusCode < 300 {
+				respError = nil
 				break
 			} else if !repeatable || (resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 408) || resp.StatusCode == 304 {
 				respError = ParseResponseToObsError(resp)
@@ -484,7 +486,9 @@ func (obsClient ObsClient) doHttp(ctx context.Context, method, bucketName, objec
 		}
 		if i != maxRetryCount {
 			if resp != nil {
-				resp.Body.Close()
+				if closeRespErr := resp.Body.Close(); closeRespErr != nil {
+					doLog(LEVEL_WARN, "Close response failed, %s", closeRespErr.Error())
+				}
 				resp = nil
 			}
 			if _, ok := headers[HEADER_AUTH_CAMEL]; ok {

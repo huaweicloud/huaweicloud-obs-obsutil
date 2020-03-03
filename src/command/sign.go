@@ -209,10 +209,10 @@ func initSign() command {
 		printf("%2s%s", "", p.Sprintf("generate the download url(s) for the objects in a specified bucket"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil sign obs://bucket/key [-e=300] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sign obs://bucket/key [-e=300] [-config=xxx]"+signCommandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil sign obs://bucket[/prefix] -r [-e=300] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sign obs://bucket[/prefix] -r [-e=300] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-o=xxx] [-config=xxx]"+signCommandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -237,6 +237,20 @@ func initSign() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		if assist.IsHec() {
+			printf("%2s%s", "", "-endpoint=xxx")
+			printf("%4s%s", "", p.Sprintf("endpoint"))
+			printf("")
+			printf("%2s%s", "", "-i=xxx")
+			printf("%4s%s", "", p.Sprintf("access key ID"))
+			printf("")
+			printf("%2s%s", "", "-k=xxx")
+			printf("%4s%s", "", p.Sprintf("security key ID"))
+			printf("")
+			printf("%2s%s", "", "-t=xxx")
+			printf("%4s%s", "", p.Sprintf("security token"))
+			printf("")
+		}
 	}
 
 	return c

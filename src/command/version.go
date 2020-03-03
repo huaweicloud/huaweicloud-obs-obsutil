@@ -17,7 +17,7 @@ import (
 	"obs"
 )
 
-const obsUtilVersion = "5.1.9"
+const obsUtilVersion = "5.1.13"
 
 func initVersion() command {
 

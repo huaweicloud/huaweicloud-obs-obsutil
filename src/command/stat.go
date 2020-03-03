@@ -298,10 +298,10 @@ func initStat() command {
 		printf("%2s%s", "", p.Sprintf("show the properties of a bucket or an object"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil stat obs://bucket [-acl] [-config=xxx]")
+		printf("%2s%s", "", "obsutil stat obs://bucket [-acl] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil stat obs://bucket/key [-acl] [-config=xxx]")
+		printf("%2s%s", "", "obsutil stat obs://bucket/key [-acl] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -311,6 +311,7 @@ func initStat() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

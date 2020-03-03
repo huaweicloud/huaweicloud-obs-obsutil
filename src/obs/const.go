@@ -196,9 +196,9 @@ var (
 	}
 
 	allowedResourceParameterNames = map[string]bool{
-		"acl":          true,
-		"backtosource": true,
-		//		"metadata":                     true,
+		"acl":                          true,
+		"backtosource":                 true,
+		"metadata":                     true,
 		"policy":                       true,
 		"torrent":                      true,
 		"logging":                      true,

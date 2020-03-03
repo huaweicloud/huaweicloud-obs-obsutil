@@ -181,10 +181,10 @@ func initRestore() command {
 		printf("%2s%s\n", "", p.Sprintf("restore objects in a bucket to be readable"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil restore obs://bucket/key [-d=1] [-t=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil restore obs://bucket/key [-d=1] [-t=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+restoreCommandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil restore obs://bucket/[prefix] -r [-f] [-v] [-d=1] [-t=xxx] [-o=xxx] [-j=1] [-config=xxx]")
+		printf("%2s%s", "", "obsutil restore obs://bucket/[prefix] -r [-f] [-v] [-d=1] [-t=xxx] [-o=xxx] [-j=1] [-config=xxx]"+restoreCommandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -218,6 +218,20 @@ func initRestore() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		if assist.IsHec() {
+			printf("%2s%s", "", "-e=xxx")
+			printf("%4s%s", "", p.Sprintf("endpoint"))
+			printf("")
+			printf("%2s%s", "", "-i=xxx")
+			printf("%4s%s", "", p.Sprintf("access key ID"))
+			printf("")
+			printf("%2s%s", "", "-k=xxx")
+			printf("%4s%s", "", p.Sprintf("security key ID"))
+			printf("")
+			printf("%2s%s", "", "-token=xxx")
+			printf("%4s%s", "", p.Sprintf("security token"))
+			printf("")
+		}
 	}
 
 	return c

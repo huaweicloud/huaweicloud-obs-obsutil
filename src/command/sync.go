@@ -42,19 +42,19 @@ func (c *syncCommand) doUpload(url1, url2 string) error {
 	relativeFolder := ""
 	if stat.Mode()&os.ModeSymlink == os.ModeSymlink {
 		if c.link {
-			if _url1, _stat, _err := assist.GetRealPath(url1); _err != nil {
+			_url1, _stat, _err := assist.GetRealPath(url1)
+			if _err != nil {
 				printError(_err)
 				return assist.ErrFileNotFound
-			} else {
-				if _stat.IsDir() {
-					if !c.flat {
-						relativeFolder = c.getRelativeFolder(url1)
-					}
-					linkFolder = true
-				}
-				url1 = _url1
-				stat = _stat
 			}
+			if _stat.IsDir() {
+				if !c.flat {
+					relativeFolder = c.getRelativeFolder(url1)
+				}
+				linkFolder = true
+			}
+			url1 = _url1
+			stat = _stat
 		} else {
 			if _stat, _err := os.Stat(url1); _err == nil && _stat.IsDir() {
 				stat = _stat
@@ -358,16 +358,16 @@ func initSync() command {
 		printf("%2s%s", "", p.Sprintf("synchronize objects from the source to the destination"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil sync file_url obs://bucket[/key] [-dryRun] [-link] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sync file_url obs://bucket[/key] [-dryRun] [-link] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil sync folder_url obs://bucket[/prefix] [-dryRun] [-link] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sync folder_url obs://bucket[/prefix] [-dryRun] [-link] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-at] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil sync obs://bucket[/prefix] folder_url [-dryRun] [-tempFileDir=xxx] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sync obs://bucket[/prefix] folder_url [-dryRun] [-tempFileDir=xxx] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 4:")
-		printf("%2s%s", "", "obsutil sync obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] [-dryRun] [-crr] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil sync obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] [-dryRun] [-crr] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -425,8 +425,11 @@ func initSync() command {
 		printf("%2s%s", "", "-exclude=*.xxx")
 		printf("%4s%s", "", p.Sprintf("the objects whose names match this pattern will be excluded"))
 		printf("")
+		printf("%2s%s", "", "-at")
+		printf("%4s%s", "", p.Sprintf("the files whose latest access time falls into the time range (-timeRange option) will be uploaded"))
+		printf("")
 		printf("%2s%s", "", "-timeRange=time1-time2")
-		printf("%4s%s", "", p.Sprintf("the time range, between which the objects will be uploaded, downloaded or copied"))
+		printf("%4s%s", "", p.Sprintf("the time range for last modified time, between which the objects will be uploaded, downloaded or copied"))
 		printf("")
 		printf("%2s%s", "", "-mf")
 		printf("%4s%s", "", p.Sprintf("the including pattern, the excluding pattern and the time range pattern will task effect on folders"))
@@ -440,6 +443,7 @@ func initSync() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 	return c
 }

@@ -68,7 +68,7 @@ type downloadPartTask struct {
 	barCh       progress.SingleBarChan
 	limiter     *ratelimit.RateLimiter
 	objectInfo  ObjectInfo
-	parsedUrl   *url.URL
+	requestUrl  interface{}
 	checkStatus bool
 }
 
@@ -89,7 +89,7 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 
 	var output *obs.GetObjectOutput
 	var err error
-	if t.parsedUrl == nil {
+	if t.requestUrl == nil {
 		input := &obs.GetObjectInput{}
 		input.Bucket = t.bucket
 		input.Key = t.key
@@ -98,10 +98,14 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 		input.RangeEnd = t.rangeEnd
 		output, err = obsClient.GetObject(input)
 	} else {
-		signedUrl := t.constructGetObjectUrl(t.parsedUrl, t.key)
-		requestHeaders := map[string][]string{
-			"Host":  []string{t.parsedUrl.Host},
-			"Range": []string{fmt.Sprintf("bytes=%d-%d", t.rangeStart, t.rangeEnd)},
+		requestHeaders := make(map[string][]string, 2)
+		requestHeaders["Range"] = []string{fmt.Sprintf("bytes=%d-%d", t.rangeStart, t.rangeEnd)}
+		var signedUrl string
+		if parsedUrl, ok := t.requestUrl.(*url.URL); ok {
+			requestHeaders["Host"] = []string{parsedUrl.Host}
+			signedUrl = t.constructGetObjectUrl(parsedUrl, t.key)
+		} else {
+			signedUrl = t.requestUrl.(string)
 		}
 
 		output, err = obsClient.GetObjectWithSignedUrl(signedUrl, requestHeaders)
@@ -249,6 +253,13 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 		status:     output.StatusCode,
 		requestId:  output.RequestId,
 	}
+
+	if ret.requestId == "" {
+		if v, ok := output.ResponseHeaders["x-obs-request-id"]; ok {
+			ret.requestId = v[0]
+		}
+	}
+
 	return
 
 }
@@ -518,7 +529,9 @@ func (c *transferCommand) downloadSmallFile(bucket, key, versionId, fileUrl stri
 				readed += int64(n)
 				slice := p[0:n]
 				wcnt, werr := bufWriter.Write(slice)
-				md5Writer.Write(slice)
+				if _, writeErr := md5Writer.Write(slice); writeErr != nil {
+					doLog(LEVEL_WARN, "Write md5 value failed, %s", writeErr.Error())
+				}
 				if werr != nil {
 					downloadFileError = &errorWrapper{
 						err:       werr,
@@ -621,7 +634,10 @@ func (c *parallelContextCommand) prepareDownloadFileCheckpoint(bucket, key, vers
 		tempFileUrl = assist.NormalizeFilePath(fmt.Sprintf("%s.obs.temp", tempFileUrl))
 	}
 
-	tempFileStat, _ := os.Stat(tempFileUrl)
+	tempFileStat, statFileErr := os.Stat(tempFileUrl)
+	if statFileErr != nil {
+		doLog(LEVEL_WARN, "Stat file failed, %s", statFileErr.Error())
+	}
 	if tempFileStat != nil && tempFileStat.IsDir() {
 		return fmt.Errorf("tempFileUrl [%s] is a folder", tempFileUrl)
 	}
@@ -714,7 +730,7 @@ func (c *parallelContextCommand) handleDownloadPartResult(dfc *DownloadFileCheck
 }
 
 func (c *parallelContextCommand) downloadBigFileConcurrent(dfc *DownloadFileCheckpoint, checkpointFile string, barChFlag bool,
-	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, parsedUrl *url.URL) (int32, int, string, map[string]string, error) {
+	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, requestUrl interface{}) (int32, int, string, map[string]string, error) {
 	pool := concurrent.NewRoutinePool(c.parallel, defaultParallelsCacheCount)
 
 	var downloadFileError atomic.Value
@@ -744,7 +760,7 @@ func (c *parallelContextCommand) downloadBigFileConcurrent(dfc *DownloadFileChec
 				barCh:       barCh,
 				limiter:     limiter,
 				objectInfo:  dfc.ObjectInfo,
-				parsedUrl:   parsedUrl,
+				requestUrl:  requestUrl,
 				checkStatus: checkStatus,
 			}
 			pool.ExecuteFunc(func() interface{} {
@@ -1194,7 +1210,10 @@ func (c *transferCommand) submitDownloadTask(bucket, dir, folder, relativePrefix
 			}
 
 			fileUrl := assist.NormalizeFilePath(folder + "/" + fileName)
-			fileStat, _ := os.Stat(fileUrl)
+			fileStat, statErr := os.Stat(fileUrl)
+			if statErr != nil {
+				doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+			}
 			if isObsFolder(key) {
 
 				if c.matchFolder {

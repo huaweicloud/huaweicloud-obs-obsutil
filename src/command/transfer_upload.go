@@ -132,7 +132,7 @@ func (t *uploadPartTask) Run() interface{} {
 	if t.writer != nil {
 		_body = progress.NewSingleProgressReaderV2(assist.Wrap(bufio.NewReaderSize(fd, int(_readBufferIoSize)), t.writer), t.partSize, t.verifyMd5, t.barCh)
 	} else {
-		_body = progress.NewSingleProgressReaderV2(repeatable.NewReaderSize(fd, int(_readBufferIoSize), t.offset), t.partSize, t.verifyMd5, t.barCh)
+		_body = progress.NewSingleProgressReaderV2(repeatable.NewReaderSize(fd, int(_readBufferIoSize), t.offset, config["faultTolerantMode"] == "true"), t.partSize, t.verifyMd5, t.barCh)
 	}
 	var body io.Reader = _body
 	if t.limiter != nil {
@@ -650,21 +650,21 @@ func (c *transferCommand) uploadBigFile(bucket, key, fileUrl string, fileStat os
 		defer h.End()
 	}
 
-	if _requestId, _status, err := c.completeMultipartUploadForUploadFile(ufc); err != nil {
-		if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode >= 400 && obsError.StatusCode < 500 &&
+	if _requestId, _status, completeErr := c.completeMultipartUploadForUploadFile(ufc); completeErr != nil {
+		if obsError, ok := completeErr.(obs.ObsError); ok && obsError.StatusCode >= 400 && obsError.StatusCode < 500 &&
 			strings.Index(config["abortHttpStatusForResumableTasks"], assist.IntToString(obsError.StatusCode)) >= 0 {
 			if isContinue, _err := c.abortMultipartUpload(ufc.Bucket, ufc.Key, ufc.UploadId); !isContinue {
 				uploadFileError = _err
 				return
 			}
-			if err = os.Remove(checkpointFile); err != nil {
-				uploadFileError = err
+			if removeErr := os.Remove(checkpointFile); removeErr != nil {
+				uploadFileError = removeErr
 				return
 			}
 		}
-		uploadFileError = err
+		uploadFileError = completeErr
 	} else {
-		if err = os.Remove(checkpointFile); err != nil {
+		if removeErr := os.Remove(checkpointFile); removeErr != nil {
 			doLog(LEVEL_WARN, "Upload big file [%s] as key [%s] in the bucket [%s] successfully, but remove checkpoint file [%s] failed",
 				ufc.FileUrl, ufc.Key, ufc.Bucket, checkpointFile)
 		}
@@ -683,13 +683,13 @@ func (c *transferCommand) uploadSmallFile(bucket, key, fileUrl string, fileStat 
 	fileSizeStr := normalizeBytes(fileSize)
 	var fd io.ReadSeeker
 	if fileSize > 0 {
-		if _fd, err := os.Open(fileUrl); err != nil {
+		_fd, err := os.Open(fileUrl)
+		if err != nil {
 			uploadFileError = err
 			return
-		} else {
-			fd = _fd
-			defer _fd.Close()
 		}
+		fd = _fd
+		defer _fd.Close()
 	} else {
 		fd = bytes.NewReader([]byte{})
 	}
@@ -724,7 +724,7 @@ func (c *transferCommand) uploadSmallFile(bucket, key, fileUrl string, fileStat 
 		_readBufferIoSize = fileSize
 	}
 
-	_body := progress.NewSingleProgressReaderV2(repeatable.NewReaderSize(fd, int(_readBufferIoSize), 0), input.ContentLength, c.verifyMd5, barCh)
+	_body := progress.NewSingleProgressReaderV2(repeatable.NewReaderSize(fd, int(_readBufferIoSize), 0, config["faultTolerantMode"] == "true"), input.ContentLength, c.verifyMd5, barCh)
 	var body io.Reader = _body
 	if limiter == nil {
 		limiter = c.createRateLimiter()
@@ -1178,15 +1178,8 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 					c.folderMap[_path] = pathToCheck
 					c.folderMapLock.Unlock()
 
-					if config["memoryEconomicalScanForUpload"] == c_true {
-						return filepath.Walk(_path, c.getWalkFunc(bucket, key, arcPath, _path, true, metadata,
-							aclType, storageClassType, pool, barCh, limiter, totalBytes, totalBytesForProgress, totalFiles))
-					}
-
-					c.doScan(_path, c.getWalkFunc(bucket, key, arcPath, _path, true, metadata,
+					return filepath.Walk(_path, c.getWalkFunc(bucket, key, arcPath, _path, true, metadata,
 						aclType, storageClassType, pool, barCh, limiter, totalBytes, totalBytesForProgress, totalFiles))
-
-					return nil
 				}
 				path = _path
 				info = _info
@@ -1209,14 +1202,17 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 				}
 			}
 
-			if !c.matchLastModifiedTime(info.ModTime()) {
+			if !c.matchUploadTimeRange(info) {
 				return nil
 			}
 
 			if !c.force && !confirm(fmt.Sprintf("Do you want upload folder [%s] to bucket [%s] ? Please input (y/n) to confirm:", path, bucket)) {
 				return nil
 			}
-
+			// modify by w00468571 wanghongbao, if the disableDirObject is true the dir will not upload as a object
+			if c.disableDirObject {
+				return nil
+			}
 			atomic.AddInt64(totalBytesForProgress, 1)
 			atomic.AddInt64(totalFiles, 1)
 
@@ -1233,7 +1229,7 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 				return nil
 			}
 
-			if !c.matchLastModifiedTime(info.ModTime()) {
+			if !c.matchUploadTimeRange(info) {
 				return nil
 			}
 
@@ -1323,6 +1319,53 @@ func (c *transferCommand) doScan(folder string, doAction func(path string, info 
 	})
 }
 
+func (c *transferCommand) walkAndCheckFileAccessTimes(folder string, folderMapLock *sync.Mutex,
+	folderMap map[string]string) func(path string, info os.FileInfo, err error) error {
+	return func(path string, info os.FileInfo, err error) error {
+		if info.Mode()&os.ModeSymlink == os.ModeSymlink {
+			if c.link {
+				_path, _info, _err := assist.GetRealPath(path)
+				if _err != nil {
+					realPathErr := fmt.Sprintf("get symbolic-link file [%s] real path failed", path)
+					doLogError(_err, LEVEL_ERROR, realPathErr)
+					return _err
+				}
+				if _info.IsDir() {
+					folderMapLock.Lock()
+					pathToCheck := folder + "-" + assist.NormalizeFilePath(path) + "/"
+					if previousFolder, ok := folderMap[_path]; ok && strings.Index(previousFolder, pathToCheck) >= 0 {
+						panicErr := fmt.Errorf("the symbolic-link folder [%s] --> [%s] result in a circle with folder [%s], path to check is [%s]", path, _path, previousFolder, pathToCheck)
+						doLogError(panicErr, LEVEL_ERROR, "")
+						folderMapLock.Unlock()
+						return panicErr
+					}
+					folderMap[_path] = pathToCheck
+					folderMapLock.Unlock()
+					return filepath.Walk(_path, c.walkAndCheckFileAccessTimes(_path, folderMapLock, folderMap))
+				}
+				path = _path
+				info = _info
+			} else {
+				if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+					info = stat
+				}
+			}
+		}
+
+		if !info.IsDir() {
+			fileAccessTime := assist.GetFileAccessTime(info)
+			if !c.matchLastAccessTime(fileAccessTime) {
+				notMatchErr := errors.New("file access time not match time range")
+				notMatchMsg := fmt.Sprintf("file [%s] access time [%v] not in range [%s]",
+					path, fileAccessTime.UTC(), c.timeRange)
+				doLogError(notMatchErr, LEVEL_ERROR, notMatchMsg)
+				return notMatchErr
+			}
+		}
+		return nil
+	}
+}
+
 func (c *transferCommand) submitUploadTask(bucket, dir, arcDir, folder string, linkFolder bool, metadata map[string]string,
 	aclType obs.AclType, storageClassType obs.StorageClassType, pool concurrent.Pool, barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter,
 	totalBytes, totalBytesForProgress, totalFiles *int64) error {
@@ -1332,6 +1375,22 @@ func (c *transferCommand) submitUploadTask(bucket, dir, arcDir, folder string, l
 			doLog(LEVEL_ERROR, "Abort to scan due to unexpected 4xx error, please check the failed manifest files to locate the root cause")
 		}
 	}()
+
+	// when -at accessTimeAccordingFolders and memoryEconomicalScanForUpload set true
+	if c.at && config["accessTimeAccordingFolders"] == c_true {
+		if config["memoryEconomicalScanForUpload"] == c_true {
+			folderMap := make(map[string]string, 10)
+			folderMapLock := new(sync.Mutex)
+			if matchErr := filepath.Walk(folder, c.walkAndCheckFileAccessTimes(folder, folderMapLock, folderMap)); matchErr != nil {
+				printf("the folder's sub-file access time is not in range [%s]", c.timeRange)
+				return nil
+			}
+			c.timeRange = ""
+		} else {
+			printf("use the -at option, must set memoryEconomicalScanForUpload value true in config file")
+			return nil
+		}
+	}
 
 	if config["memoryEconomicalScanForUpload"] == c_true || c.link {
 		if err := filepath.Walk(folder, c.getWalkFunc(bucket, dir, arcDir, folder, linkFolder, metadata,
@@ -1387,20 +1446,20 @@ func (c *transferCommand) uploadFileOrFolder(bucket, dir, filePath string, limit
 	relativeFolder := ""
 	if stat.Mode()&os.ModeSymlink == os.ModeSymlink {
 		if c.link {
-			if _url1, _stat, err := assist.GetRealPath(fileUrl); err != nil {
-				linkErrorMsg := fmt.Sprintf("Get real path for path [%s] failed, [%s]", fileUrl, fileStatErr.Error())
+			_url1, _stat, _err := assist.GetRealPath(fileUrl)
+			if _err != nil {
+				linkErrorMsg := fmt.Sprintf("Get real path for path [%s] failed, [%s]", fileUrl, _err.Error())
 				c.recordPrepareFailed(bucket, dir, filePath, totalBytesForProgress, totalFiles, linkErrorMsg)
-				return fileStatErr
-			} else {
-				if _stat.IsDir() {
-					if !c.flat {
-						relativeFolder = c.getRelativeFolder(fileUrl)
-					}
-					linkFolder = true
-				}
-				fileUrl = _url1
-				stat = _stat
+				return _err
 			}
+			if _stat.IsDir() {
+				if !c.flat {
+					relativeFolder = c.getRelativeFolder(fileUrl)
+				}
+				linkFolder = true
+			}
+			fileUrl = _url1
+			stat = _stat
 		} else {
 			if _stat, err := os.Stat(fileUrl); err == nil && _stat.IsDir() {
 				stat = _stat

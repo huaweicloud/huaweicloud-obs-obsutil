@@ -16,6 +16,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"hash/crc64"
 	"io"
 	"os"
 	"os/exec"
@@ -233,6 +234,38 @@ func Md5File(fileUrl string) ([]byte, error) {
 	}
 	PutByteArrayToPool(p)
 	return m.Sum(nil), nil
+}
+
+func Crc64File(fileUrl string) (uint64, error) {
+	fd, err := os.Open(fileUrl)
+	if err != nil {
+		return 0, err
+	}
+	defer fd.Close()
+	m := crc64.New(crc64.MakeTable(crc64.ECMA))
+
+	p := GetByteArrayFromPool()
+	reader := bufio.NewReaderSize(fd, readBufferIoSize)
+	for {
+		n, err := reader.Read(p)
+		if n > 0 {
+			_, werr := m.Write(p[0:n])
+			if werr != nil {
+				PutByteArrayToPool(p)
+				return 0, werr
+			}
+		}
+
+		if err != nil {
+			if err != io.EOF {
+				PutByteArrayToPool(p)
+				return 0, err
+			}
+			break
+		}
+	}
+	PutByteArrayToPool(p)
+	return m.Sum64(), nil
 }
 
 func GetRealPath(path string) (realPath string, realStat os.FileInfo, err error) {

@@ -52,12 +52,12 @@ func (c *cpCommand) doRecover() error {
 	}
 
 	var fileUrls []string
-	if _fileUrls, err := assist.FindFilesV2(c.outDir, regexp.MustCompile(fmt.Sprintf("failed_report_.+?_%s.txt", c.rec))); err != nil {
+	_fileUrls, err := assist.FindFilesV2(c.outDir, regexp.MustCompile(fmt.Sprintf("failed_report_.+?_%s.txt", c.rec)))
+	if err != nil {
 		printError(err)
 		return assist.ErrExecuting
-	} else {
-		fileUrls = _fileUrls
 	}
+	fileUrls = _fileUrls
 
 	if len(fileUrls) <= 0 {
 		printf("Error: Cannot find any failed-record file for task id [%s]!", c.rec)
@@ -171,20 +171,20 @@ func (c *cpCommand) doUpload(url1, url2 string) error {
 	relativeFolder := ""
 	if stat.Mode()&os.ModeSymlink == os.ModeSymlink {
 		if c.link {
-			if _url1, _stat, err := assist.GetRealPath(url1); err != nil {
+			_url1, _stat, err := assist.GetRealPath(url1)
+			if err != nil {
 				printError(err)
 				return assist.ErrFileNotFound
-			} else {
-				if _stat.IsDir() {
-					if !c.flat {
-						relativeFolder = c.getRelativeFolder(url1)
-					}
-					linkFolder = true
-					c.folderMap[_url1] = assist.NormalizeFilePath(url1) + "/"
-				}
-				url1 = _url1
-				stat = _stat
 			}
+			if _stat.IsDir() {
+				if !c.flat {
+					relativeFolder = c.getRelativeFolder(url1)
+				}
+				linkFolder = true
+				c.folderMap[_url1] = assist.NormalizeFilePath(url1) + "/"
+			}
+			url1 = _url1
+			stat = _stat
 		} else {
 			if _stat, _err := os.Stat(url1); _err == nil && _stat.IsDir() {
 				stat = _stat
@@ -614,28 +614,28 @@ func initCp() command {
 		printf("%2s%s", "", p.Sprintf("upload, download or copy objects"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil cp file_url|folder_url obs://bucket[/key] [-dryRun] [-link] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp file_url|folder_url obs://bucket[/key] [-dryRun] [-link] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil cp folder_url obs://bucket[/prefix] -r [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp folder_url obs://bucket[/prefix] -r [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil cp file1_url,folder1_url|filelist_url obs://bucket[/prefix] -msm=1 [-r] [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp file1_url,folder1_url|filelist_url obs://bucket[/prefix] -msm=1 [-r] [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 4:")
-		printf("%2s%s", "", "obsutil cp obs://bucket/key file_url|folder_url [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp obs://bucket/key file_url|folder_url [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 5:")
-		printf("%2s%s", "", "obsutil cp obs://bucket[/prefix] folder_url -r [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp obs://bucket[/prefix] folder_url -r [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-at] [-disableDirObject] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 6:")
-		printf("%2s%s", "", "obsutil cp obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-crr] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-crr] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 7:")
-		printf("%2s%s", "", "obsutil cp obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-crr] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-crr] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 8:")
-		printf("%2s%s", "", "obsutil cp -recover=xxx [-dryRun] [-crr] [-f] [-u] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-tempFileDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]")
+		printf("%2s%s", "", "obsutil cp -recover=xxx [-dryRun] [-crr] [-f] [-u] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-tempFileDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -708,8 +708,14 @@ func initCp() command {
 		printf("%2s%s", "", "-exclude=*.xxx")
 		printf("%4s%s", "", p.Sprintf("the objects whose names match this pattern will be excluded"))
 		printf("")
+		printf("%2s%s", "", "-at")
+		printf("%4s%s", "", p.Sprintf("the files whose latest access time falls into the time range (-timeRange option) will be uploaded"))
+		printf("")
+		printf("%2s%s", "", "-disableDirObject")
+		printf("%4s%s", "", p.Sprintf("the folder will not be uploaded as a object"))
+		printf("")
 		printf("%2s%s", "", "-timeRange=time1-time2")
-		printf("%4s%s", "", p.Sprintf("the time range, between which the objects will be uploaded, downloaded or copied"))
+		printf("%4s%s", "", p.Sprintf("the time range for last modified time, between which the objects will be uploaded, downloaded or copied"))
 		printf("")
 		printf("%2s%s", "", "-mf")
 		printf("%4s%s", "", p.Sprintf("the including pattern, the excluding pattern and the time range pattern will task effect on folders"))
@@ -726,6 +732,7 @@ func initCp() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 	return c
 }

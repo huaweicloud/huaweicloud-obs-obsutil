@@ -180,11 +180,11 @@ func (ecsSp *EcsSecurityProvider) getAndSetSecurityWithOutLock() SecurityHolder 
 func (ecsSp *EcsSecurityProvider) getAndSetSecurity() SecurityHolder {
 	ecsSp.lock.Lock()
 	defer ecsSp.lock.Unlock()
-	if tsh, succeed := ecsSp.loadTemporarySecurityHolder(); !succeed {
+	tsh, succeed := ecsSp.loadTemporarySecurityHolder()
+	if !succeed {
 		return ecsSp.getAndSetSecurityWithOutLock()
-	} else {
-		return tsh.SecurityHolder
 	}
+	return tsh.SecurityHolder
 }
 
 func (ecsSp *EcsSecurityProvider) GetSecurity() SecurityHolder {

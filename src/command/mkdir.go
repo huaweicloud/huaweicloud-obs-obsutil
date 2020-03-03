@@ -74,10 +74,9 @@ func initMkdir() command {
 				printf("Create folder [obs://%s/%s] successfully, request id [%s]", bucket, key, output.RequestId)
 				doLog(LEVEL_INFO, "Create folder [obs://%s/%s] successfully, request id [%s]", bucket, key, output.RequestId)
 				return nil
-			} else {
-				logError(err, LEVEL_INFO, fmt.Sprintf("Create folder [obs://%s/%s] failed", bucket, key))
-				return assist.ErrExecuting
 			}
+			logError(err, LEVEL_INFO, fmt.Sprintf("Create folder [obs://%s/%s] failed", bucket, key))
+			return assist.ErrExecuting
 		}
 
 		if fsStatus == c_disabled {
@@ -121,7 +120,7 @@ func initMkdir() command {
 		printf("%2s%s", "", p.Sprintf("create folder(s) in a specified bucket or in the local file system"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil mkdir obs://bucket/folder1/folder2/folder3/ [-config=xxx]")
+		printf("%2s%s", "", "obsutil mkdir obs://bucket/folder1/folder2/folder3/ [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
 		printf("%2s%s", "", "obsutil mkdir folder_url [-config=xxx]")
@@ -131,6 +130,7 @@ func initMkdir() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

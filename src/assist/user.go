@@ -27,12 +27,13 @@ func Home() (string, error) {
 	if homePath != "" {
 		return homePath, nil
 	}
-	if h, err := home(); err == nil {
+
+	h, err := home()
+	if err == nil {
 		homePath = h
 		return homePath, nil
-	} else {
-		return "", err
 	}
+	return "", err
 }
 
 func home() (string, error) {
@@ -42,42 +43,52 @@ func home() (string, error) {
 	}
 
 	if "windows" == runtime.GOOS {
-		return homeWindows()
+		return getWindowsHome()
 	}
 
-	return homeUnix()
+	return getUnixHome()
 }
 
-func homeUnix() (string, error) {
-	if home := os.Getenv("HOME"); home != "" {
-		return home, nil
+func getUnixHome() (ret string, err error) {
+	ret = strings.TrimSpace(os.Getenv("HOME"))
+	if ret != "" {
+		return
 	}
 
-	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", "eval echo ~$USER")
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return "", err
+	evalCommand := exec.Command("sh", "-c", "eval echo ~$USER")
+	evalCommand.Stdout = new(bytes.Buffer)
+	err = evalCommand.Run()
+	if err != nil {
+		return
 	}
 
-	result := strings.TrimSpace(stdout.String())
-	if result == "" {
-		return "", errors.New("blank output when reading home directory")
+	output, ok := evalCommand.Stdout.(*bytes.Buffer)
+	if ok {
+		ret = strings.TrimSpace(output.String())
 	}
 
-	return result, nil
+	if ret == "" {
+		err = errors.New("Get blank output after exectuing command to read home directory")
+		return
+	}
+
+	return
 }
 
-func homeWindows() (string, error) {
-	drive := os.Getenv("HOMEDRIVE")
-	path := os.Getenv("HOMEPATH")
-	home := drive + path
-	if drive == "" || path == "" {
-		home = os.Getenv("USERPROFILE")
-	}
-	if home == "" {
-		return "", errors.New("HOMEDRIVE, HOMEPATH, and USERPROFILE are blank")
+func getWindowsHome() (ret string, err error) {
+	homePath := strings.TrimSpace(os.Getenv("HOMEPATH"))
+	homeDrive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
+
+	if homePath == "" || homeDrive == "" {
+		ret = strings.TrimSpace(os.Getenv("USERPROFILE"))
+	} else {
+		ret = homeDrive + homePath
 	}
 
-	return home, nil
+	if ret == "" {
+		err = errors.New("Either HOMEDRIVE, HOMEPATH, or USERPROFILE is blank")
+		return
+	}
+
+	return
 }

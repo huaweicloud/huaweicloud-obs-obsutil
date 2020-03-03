@@ -70,7 +70,12 @@ func (c *archiveCommand) doCompress(filePath string, prefix string,
 	if err != nil {
 		return
 	}
-	info, _ := fd.Stat()
+	info, statErr := fd.Stat()
+	if statErr != nil {
+		doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+		fd.Close()
+		return
+	}
 	if info == nil {
 		fd.Close()
 		return
@@ -87,7 +92,9 @@ func (c *archiveCommand) doCompress(filePath string, prefix string,
 	}
 
 	if index := strings.LastIndex(fd.Name(), filePattern); index < 0 {
-		fd.Close()
+		if closeFdErr := fd.Close(); closeFdErr != nil {
+			doLog(LEVEL_WARN, "Close file fd failed, %s", closeFdErr.Error())
+		}
 		return
 	}
 
@@ -178,8 +185,13 @@ func (c *archiveCommand) doArchive(dst string, succeedFunc func(dst string) erro
 
 	if progress.GetSucceedCount() == totalCnt {
 		printf("Succeed to archive log files to [%s]", dst)
-		zw.Close()
-		dstFile.Close()
+		if zeErr := zw.Close(); zeErr != nil {
+			doLog(LEVEL_WARN, "Close zip writer failed, %s", zeErr.Error())
+		}
+
+		if fileCloErr := dstFile.Close(); fileCloErr != nil {
+			doLog(LEVEL_WARN, "Close destination file failed, %s", fileCloErr.Error())
+		}
 		if succeedFunc != nil {
 			return succeedFunc(dst)
 		}
@@ -268,16 +280,17 @@ func initArchive() command {
 		printf("%2s%s", "", p.Sprintf("archive log files to local file system or OBS"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil archive [file_url|folder_url] [-config=xxx]")
+		printf("%2s%s", "", "obsutil archive [file_url|folder_url] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil archive obs://bucket[/prefix] [-config=xxx]")
+		printf("%2s%s", "", "obsutil archive obs://bucket[/prefix] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

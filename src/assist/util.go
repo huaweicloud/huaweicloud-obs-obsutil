@@ -12,10 +12,7 @@
 package assist
 
 import (
-	"crypto/hmac"
 	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
@@ -53,20 +50,12 @@ func GetArch() string {
 	return runtime.GOARCH
 }
 
-func Round(val float64) (newVal float64) {
-	roundOn := 0.5
-	places := 0
-	var round float64
-	pow := math.Pow(10, float64(places))
-	digit := pow * val
-	_, div := math.Modf(digit)
-	if div >= roundOn {
-		round = math.Ceil(digit)
-	} else {
-		round = math.Floor(digit)
+func Round(input float64) float64 {
+	_, t := math.Modf(input)
+	if t < 0.5 {
+		return math.Floor(input)
 	}
-	newVal = round / pow
-	return
+	return math.Ceil(input)
 }
 
 func GetTerminalWidth() (int, error) {
@@ -137,18 +126,6 @@ func TransToXml(value interface{}) ([]byte, error) {
 		return []byte{}, nil
 	}
 	return xml.Marshal(value)
-}
-
-func HmacSha1(key, value []byte) []byte {
-	mac := hmac.New(sha1.New, key)
-	mac.Write(value)
-	return mac.Sum(nil)
-}
-
-func HmacSha256(key, value []byte) []byte {
-	mac := hmac.New(sha256.New, key)
-	mac.Write(value)
-	return mac.Sum(nil)
 }
 
 func Base64Encode(value []byte) string {

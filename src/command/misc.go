@@ -94,6 +94,8 @@ var cleanUpSkRegex1 = regexp.MustCompile("-k=.*?\\s+")
 var cleanUpSkRegex2 = regexp.MustCompile("-k\\s+.*?\\s+")
 var cleanUpTokenRegex1 = regexp.MustCompile("-t=.*?\\s+")
 var cleanUpTokenRegex2 = regexp.MustCompile("-t\\s+.*?\\s+")
+var cleanUpTokenRegex3 = regexp.MustCompile("-token=.*?\\s+")
+var cleanUpTokenRegex4 = regexp.MustCompile("-token\\s+.*?\\s+")
 
 var aclEveryOne = "Everyone"
 
@@ -136,7 +138,7 @@ var defaultConfigMap = map[string]interface{}{
 	"checkSourceChange":                false,
 	"skipCheckEmptyFolder":             false,
 	"fsyncForDownload":                 false,
-	"memoryEconomicalScanForUpload":    false,
+	"memoryEconomicalScanForUpload":    true,
 	"forceOverwriteForDownload":        true,
 	"panicForSymbolicLinkCircle":       false,
 	"autoChooseSecurityProvider":       false,
@@ -144,6 +146,7 @@ var defaultConfigMap = map[string]interface{}{
 	"abortHttpStatusForResumableTasks": defaultAbortHttpStatus,
 	"showBytesForCopy":                 false,
 	"proxyUrl":                         emptyString,
+	"faultTolerantMode":                false,
 }
 
 var defaultConfigSlice = []string{
@@ -193,6 +196,7 @@ var defaultConfigSlice = []string{
 	"abortHttpStatusForResumableTasks",
 	"showBytesForCopy",
 	"proxyUrl",
+	"faultTolerantMode",
 }
 
 const (
@@ -209,14 +213,19 @@ const (
 	c_multiAz                = "multi-az"
 	c_expedited              = "expedited"
 
-	c_object               = "OBJECT"
-	c_true                 = "true"
-	c_na                   = "n/a"
-	c_raw                  = "raw"
-	c_cloud_url_usage      = "cloud_url [options...]"
-	c_share_usage          = "authorization_code [options...]"
-	c_auto                 = "auto"
-	c_waiting_caculate_md5 = "Waiting to caculate the md5 value"
+	c_object                = "OBJECT"
+	c_true                  = "true"
+	c_na                    = "n/a"
+	c_raw                   = "raw"
+	c_cloud_url_usage       = "cloud_url [options...]"
+	c_share_usage           = "authorization_code [options...]"
+	c_share_cp_usage        = "authorization_code file_url [options...]"
+	c_direct_download_usage = "resource_url file_url [options...]"
+	c_auto                  = "auto"
+	c_waiting_caculate_md5  = "Waiting to caculate the md5 value"
+
+	c_md5   = "md5"
+	c_crc64 = "crc64"
 )
 
 var bucketAclType = map[string]obs.AclType{
@@ -316,17 +325,21 @@ func (c *scanContext) init() {
 }
 
 type defaultCommand struct {
-	key           string
-	usage         interface{}
-	description   string
-	additional    bool
-	define        func()
-	action        func() error
-	help          func()
-	flagSet       *flag.FlagSet
-	configUrl     string
-	failedCount   int64
-	skipCheckAkSk bool
+	key            string
+	usage          interface{}
+	description    string
+	additional     bool
+	define         func()
+	action         func() error
+	help           func()
+	flagSet        *flag.FlagSet
+	configAk       string
+	configSk       string
+	configToken    string
+	configEndpoint string
+	configUrl      string
+	failedCount    int64
+	skipCheckAkSk  bool
 }
 
 func (c *defaultCommand) getKey() string {
@@ -368,6 +381,38 @@ func (c *defaultCommand) setFlagSet(flagSet *flag.FlagSet) {
 	c.flagSet = flagSet
 }
 
+func (c *defaultCommand) needReloadObsClient() bool {
+	return c.needReloadAkSk() || c.configEndpoint != ""
+}
+
+func (c *defaultCommand) needReloadAkSk() bool {
+	return c.configAk != "" || c.configSk != "" || c.configToken != ""
+}
+
+func (c *defaultCommand) getFlagValue(flagName, otherFlagName, flagRealName string) (string, error) {
+	for index, v := range c.flagSet.Args() {
+		v = strings.TrimSpace(v)
+		if v == flagName {
+			if len(c.flagSet.Args())-1 <= index {
+				printf("Error: The config %s is not set correctly!", flagRealName)
+				return "", assist.ErrInvalidArgs
+			}
+
+			configFlagValue := c.flagSet.Arg(index + 1)
+
+			if strings.HasPrefix(configFlagValue, "-") {
+				printf("Error: The config %s is not set correctly!", flagRealName)
+				return "", assist.ErrInvalidArgs
+			}
+			return configFlagValue, nil
+		}
+		if inx := strings.Index(v, otherFlagName); inx == 0 {
+			return v[len(otherFlagName):], nil
+		}
+	}
+	return "", nil
+}
+
 func (c *defaultCommand) parse(args []string) error {
 	c.setFlagSet(initFlagSet())
 
@@ -376,6 +421,20 @@ func (c *defaultCommand) parse(args []string) error {
 	}
 
 	c.flagSet.StringVar(&c.configUrl, "config", "", "")
+	if assist.IsHec() && c.key != "config" {
+		c.flagSet.StringVar(&c.configAk, "i", "", "")
+		c.flagSet.StringVar(&c.configSk, "k", "", "")
+		if c.key != "sign" {
+			c.flagSet.StringVar(&c.configEndpoint, "e", "", "")
+		} else {
+			c.flagSet.StringVar(&c.configEndpoint, "endpoint", "", "")
+		}
+		if c.key != "restore" {
+			c.flagSet.StringVar(&c.configToken, "t", "", "")
+		} else {
+			c.flagSet.StringVar(&c.configToken, "token", "", "")
+		}
+	}
 
 	if err := c.flagSet.Parse(args); err != nil {
 		c.showHelp()
@@ -409,6 +468,50 @@ func (c *defaultCommand) parse(args []string) error {
 		}
 
 	}
+	if c.configAk == "" {
+		flagValue, setFlagError := c.getFlagValue("-i", "-i=", "Access key")
+		if setFlagError != nil {
+			return setFlagError
+		}
+		c.configAk = flagValue
+	}
+	if c.configSk == "" {
+		flagValue, setFlagError := c.getFlagValue("-k", "-k=", "Secrete key")
+		if setFlagError != nil {
+			return setFlagError
+		}
+		c.configSk = flagValue
+	}
+	if c.configToken == "" {
+		if c.key != "restore" {
+			flagValue, setFlagError := c.getFlagValue("-t", "-t=", "Secrete token")
+			if setFlagError != nil {
+				return setFlagError
+			}
+			c.configToken = flagValue
+		} else {
+			flagValue, setFlagError := c.getFlagValue("-token", "-token=", "Secrete token")
+			if setFlagError != nil {
+				return setFlagError
+			}
+			c.configToken = flagValue
+		}
+	}
+	if c.configEndpoint == "" {
+		if c.key != "sign" {
+			flagValue, setFlagError := c.getFlagValue("-e", "-e=", "Endpoint")
+			if setFlagError != nil {
+				return setFlagError
+			}
+			c.configEndpoint = flagValue
+		} else {
+			flagValue, setFlagError := c.getFlagValue("-endpoint", "-endpoint=", "Endpoint")
+			if setFlagError != nil {
+				return setFlagError
+			}
+			c.configEndpoint = flagValue
+		}
+	}
 
 	if c.getAction() != nil {
 		needReload := false
@@ -422,6 +525,8 @@ func (c *defaultCommand) parse(args []string) error {
 		} else if configFile != originConfigFile { // reset and reload config file if not set a new config url
 			needReload = true
 			configFile = originConfigFile
+		} else if c.needReloadObsClient() { // user add -i -k -e -token
+			needReload = true
 		}
 
 		// reload config file if config or obsClient is not initialized
@@ -431,7 +536,10 @@ func (c *defaultCommand) parse(args []string) error {
 
 		// reload config file if changed
 		if !needReload && configFileStat != nil && !configFileStat.IsDir() {
-			newStat, _ := os.Stat(configFile)
+			newStat, statErr := os.Stat(configFile)
+			if statErr != nil {
+				doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+			}
 			if newStat != nil && !newStat.IsDir() && newStat.ModTime() != configFileStat.ModTime() {
 				needReload = true
 			}
@@ -445,7 +553,11 @@ func (c *defaultCommand) parse(args []string) error {
 				printError(err)
 				return assist.ErrInitializing
 			}
-			configFileStat, _ = os.Stat(configFile)
+			var statErr error
+			configFileStat, statErr = os.Stat(configFile)
+			if statErr != nil {
+				doLog(LEVEL_WARN, "Stat file failed, %s", statErr.Error())
+			}
 			setCurrentLanguage()
 		}
 
@@ -458,7 +570,20 @@ func (c *defaultCommand) parse(args []string) error {
 					return assist.ErrInvalidArgs
 				}
 
-				if config["ak"] == defaultAccessKey || config["sk"] == defaultSecurityKey || config["endpoint"] == defaultEndpoint || config["endpoint"] == "" {
+				if assist.IsHec() {
+					if c.needReloadAkSk() {
+						config["ak"] = c.configAk
+						config["sk"] = c.configSk
+						config["token"] = c.configToken
+					}
+					if c.configEndpoint != "" {
+						config["endpoint"] = c.configEndpoint
+					}
+				}
+
+				if config["ak"] == defaultAccessKey || config["ak"] == "" ||
+					config["sk"] == defaultSecurityKey || config["sk"] == "" ||
+					config["endpoint"] == defaultEndpoint || config["endpoint"] == "" {
 					printf("Warn: Please set ak, sk and endpoint in the configuration file!")
 					return assist.ErrInvalidArgs
 				}
@@ -492,13 +617,7 @@ func (c *defaultCommand) printStart() (start time.Time) {
 	return
 }
 
-type cloudUrlCommand struct {
-	defaultCommand
-	emptyArgsAction    func() error
-	additionalValidate func(cloudUrl string) bool
-}
-
-func (c *cloudUrlCommand) checkArgs(args []string) error {
+func (c *defaultCommand) checkArgs(args []string) error {
 	if err := c.flagSet.Parse(args); err != nil {
 		c.showHelp()
 		return err
@@ -509,6 +628,12 @@ func (c *cloudUrlCommand) checkArgs(args []string) error {
 		return fmt.Errorf("Invalid args \"%v\", please refer to help doc", c.flagSet.Args())
 	}
 	return nil
+}
+
+type cloudUrlCommand struct {
+	defaultCommand
+	emptyArgsAction    func() error
+	additionalValidate func(cloudUrl string) bool
 }
 
 func (c *cloudUrlCommand) prepareCloudUrl() (cloudUrl string, err error) {
@@ -607,16 +732,16 @@ func (c *cloudUrlCommand) ensureBucketByClient(bucket string, client *obs.ObsCli
 func (c *cloudUrlCommand) checkBucketFSStatus(bucket string) (string, error) {
 	input := &obs.GetBucketFSStatusInput{}
 	input.Bucket = bucket
-	if output, err := obsClient.GetBucketFSStatus(input); err != nil {
+	output, err := obsClient.GetBucketFSStatus(input)
+	if err != nil {
 		if obsError, ok := err.(obs.ObsError); ok {
 			if status := obsError.StatusCode; status >= 300 && status < 500 && status != 404 && status != 408 {
 				return c_unknown, nil
 			}
 		}
 		return c_unknown, fmt.Errorf("Check the fs status of bucket [%s] failed, %s", bucket, err.Error())
-	} else {
-		return transFSStatusType(output.FSStatus), nil
 	}
+	return transFSStatusType(output.FSStatus), nil
 }
 
 type reportCommand struct {
@@ -988,7 +1113,8 @@ type recursiveCommand struct {
 	include           string
 	exclude           string
 	timeRange         string
-
+	at                bool
+	disableDirObject  bool
 	//need to be reset in init func
 	includeRegex *regexp.Regexp
 	excludeRegex *regexp.Regexp
@@ -1009,13 +1135,13 @@ func (c *recursiveCommand) checkExclude() bool {
 	if c.exclude == "" {
 		return true
 	}
-	if re, err := assist.CompileWildcardInput(c.exclude); err != nil {
+	re, err := assist.CompileWildcardInput(c.exclude)
+	if err != nil {
 		printf("Error: The exclude pattern [%s] is not well-formed, %s", c.exclude, err.Error())
 		return false
-	} else {
-		c.excludeRegex = re
-		return true
 	}
+	c.excludeRegex = re
+	return true
 }
 
 func (c *recursiveCommand) checkTimeRange() bool {
@@ -1029,18 +1155,20 @@ func (c *recursiveCommand) checkTimeRange() bool {
 		return false
 	}
 
-	if ts, err := assist.Str2Timestamp(timePair[0], 0); err != nil {
+	gts, err := assist.Str2Timestamp(timePair[0], 0)
+	if err != nil {
 		printf("Error: The timeRange pattern [%s] is not well-formed, %s", c.timeRange, err.Error())
 		return false
-	} else {
-		c.gt = ts
 	}
-	if ts, err := assist.Str2Timestamp(timePair[1], 1<<63-1); err != nil {
+	c.gt = gts
+
+	lts, err := assist.Str2Timestamp(timePair[1], 1<<63-1)
+	if err != nil {
 		printf("Error: The timeRange pattern [%s] is not well-formed, %s", c.timeRange, err.Error())
 		return false
-	} else {
-		c.lt = ts
 	}
+	c.lt = lts
+
 	if c.gt > c.lt {
 		printf("Error: The timeRange pattern [%s] is not well-formed, start time greater than end time.", c.timeRange)
 		return false
@@ -1052,13 +1180,14 @@ func (c *recursiveCommand) checkInclude() bool {
 	if c.include == "" {
 		return true
 	}
-	if re, err := assist.CompileWildcardInput(c.include); err != nil {
+
+	re, err := assist.CompileWildcardInput(c.include)
+	if err != nil {
 		printf("Error: The include pattern [%s] is not well-formed, %s", c.include, err.Error())
 		return false
-	} else {
-		c.includeRegex = re
-		return true
 	}
+	c.includeRegex = re
+	return true
 }
 
 func (c *recursiveCommand) matchExclude(fileName string) bool {
@@ -1081,6 +1210,20 @@ func (c *recursiveCommand) matchLastModifiedTime(mt time.Time) (match bool) {
 	}
 	match = mt.UTC().Unix() >= c.gt && mt.UTC().Unix() <= c.lt
 	return
+}
+
+func (c *recursiveCommand) matchUploadTimeRange(info os.FileInfo) bool {
+	if c.at {
+		return c.matchLastAccessTime(assist.GetFileAccessTime(info))
+	}
+	return c.matchLastModifiedTime(info.ModTime())
+}
+
+func (c *recursiveCommand) matchLastAccessTime(mt time.Time) bool {
+	if c.timeRange == "" {
+		return true
+	}
+	return mt.UTC().Unix() >= c.gt && mt.UTC().Unix() <= c.lt
 }
 
 func (c *recursiveCommand) checkBucketVersion(bucket string) string {
@@ -1401,19 +1544,24 @@ func handleResult(ret bool, ch progress.SingleBarChan) bool {
 func getCurrentDir() string {
 	if currentDir == "" {
 		currentDir = assist.GetOsPath(os.Args[0])
-		currentDir, _ = filepath.Abs(filepath.Dir(currentDir))
+		var absErr error
+		currentDir, absErr = filepath.Abs(filepath.Dir(currentDir))
+		if absErr != nil {
+			doLog(LEVEL_WARN, "Get file absolute path failed, %s", absErr.Error())
+		}
 	}
 	return currentDir
 }
 
 func getBucketAclType(acl string) (obs.AclType, bool) {
 	if acl != "" {
-		if aclType, ok := bucketAclType[acl]; !ok {
+		aclType, ok := bucketAclType[acl]
+		if !ok {
 			printf("Error: Invalid acl [%s], possible values are:[%s|%s|%s]", acl, c_private, c_publicRead, c_publicReadWrite)
 			return "", false
-		} else {
-			return aclType, true
 		}
+
+		return aclType, true
 	}
 
 	return "", true
@@ -1421,12 +1569,12 @@ func getBucketAclType(acl string) (obs.AclType, bool) {
 
 func getObjectAclType(acl string) (obs.AclType, bool) {
 	if acl != "" {
-		if aclType, ok := objectAclType[acl]; !ok {
+		aclType, ok := objectAclType[acl]
+		if !ok {
 			printf("Error: Invalid acl [%s], possible values are:[%s|%s|%s|%s]", acl, c_private, c_publicRead, c_publicReadWrite, c_bucketOwnerFullControl)
 			return "", false
-		} else {
-			return aclType, true
 		}
+		return aclType, true
 	}
 
 	return "", true
@@ -1434,24 +1582,24 @@ func getObjectAclType(acl string) (obs.AclType, bool) {
 
 func getStorageClassType(sc string) (obs.StorageClassType, bool) {
 	if sc != "" {
-		if scType, ok := storageClassType[sc]; !ok {
+		scType, ok := storageClassType[sc]
+		if !ok {
 			printf("Error: Invalid sc [%s], possible values are:[%s|%s|%s]", sc, c_standard, c_warm, c_cold)
 			return "", false
-		} else {
-			return scType, true
 		}
+		return scType, true
 	}
 	return "", true
 }
 
 func getAvailableZoneType(az string) (obs.AvailableZoneType, bool) {
 	if az != "" {
-		if azType, ok := availableZoneType[az]; !ok {
+		azType, ok := availableZoneType[az]
+		if !ok {
 			printf("Error: Invalid az [%s], possible values are:[%s]", az, c_multiAz)
 			return "", false
-		} else {
-			return azType, true
 		}
+		return azType, true
 	}
 	return "", true
 }
@@ -1558,6 +1706,44 @@ func printf(format string, a ...interface{}) {
 		return
 	}
 	fmt.Println(format)
+}
+
+func commandCommonSyntax() string {
+	if assist.IsHec() {
+		return " [-i=xxx] [-k=xxx] [-t=xxx] [-e=xxx]"
+	}
+	return ""
+}
+
+func signCommandCommonSyntax() string {
+	if assist.IsHec() {
+		return " [-i=xxx] [-k=xxx] [-t=xxx] [-endpoint=xxx]"
+	}
+	return ""
+}
+
+func restoreCommandCommonSyntax() string {
+	if assist.IsHec() {
+		return " [-i=xxx] [-k=xxx] [-token=xxx] [-e=xxx]"
+	}
+	return ""
+}
+
+func commandCommonHelp(p *i18n.PrinterWrapper) {
+	if assist.IsHec() {
+		printf("%2s%s", "", "-e=xxx")
+		printf("%4s%s", "", p.Sprintf("endpoint"))
+		printf("")
+		printf("%2s%s", "", "-i=xxx")
+		printf("%4s%s", "", p.Sprintf("access key ID"))
+		printf("")
+		printf("%2s%s", "", "-k=xxx")
+		printf("%4s%s", "", p.Sprintf("security key ID"))
+		printf("")
+		printf("%2s%s", "", "-t=xxx")
+		printf("%4s%s", "", p.Sprintf("security token"))
+		printf("")
+	}
 }
 
 func getUserInput(notice string) (string, error) {

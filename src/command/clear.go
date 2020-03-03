@@ -269,12 +269,12 @@ func initClear() command {
 		args := c.flagSet.Args()
 		var checkpointDir string
 		if len(args) <= 0 {
-			if dir, err := getCheckpointDirectory(); err != nil {
+			dir, err := getCheckpointDirectory()
+			if err != nil {
 				printError(err)
 				return assist.ErrExecuting
-			} else {
-				checkpointDir = dir
 			}
+			checkpointDir = dir
 		} else if len(args) >= 1 {
 			checkpointDir = args[0]
 			if err := c.flagSet.Parse(args[1:]); err != nil {
@@ -337,7 +337,7 @@ func initClear() command {
 		printf("%2s%s", "", p.Sprintf("delete part records"))
 		printf("")
 		p.Printf("Syntax:")
-		printf("%2s%s", "", "obsutil clear [checkpoint_dir] [-u] [-d] [-c] [-config=xxx]")
+		printf("%2s%s", "", "obsutil clear [checkpoint_dir] [-u] [-d] [-c] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -353,6 +353,7 @@ func initClear() command {
 		printf("%2s%s", "", "-config=xxx")
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
+		commandCommonHelp(p)
 	}
 
 	return c

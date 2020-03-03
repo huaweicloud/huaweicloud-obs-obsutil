@@ -84,6 +84,9 @@ func initCommands() {
 		initMkdir,
 		initSign,
 		initMv,
+		initCat,
+		initHash,
+		initDirectDownload,
 	}
 
 	if assist.IsHec() {
@@ -176,10 +179,6 @@ func runCommand(args []string, additionalAction func(c command)) error {
 
 func logUserInput(inputs []string, c command) {
 	userInput := strings.Join(inputs, " ")
-	if _, ok := c.(*configCommand); !ok {
-		doLog(LEVEL_INFO, "User input command \"%s\"", userInput)
-		return
-	}
 	userInput += " "
 	userInput = cleanUpAkRegex1.ReplaceAllString(userInput, "-i=xxx ")
 	userInput = cleanUpAkRegex2.ReplaceAllString(userInput, "-i xxx ")
@@ -187,6 +186,8 @@ func logUserInput(inputs []string, c command) {
 	userInput = cleanUpSkRegex2.ReplaceAllString(userInput, "-k xxx ")
 	userInput = cleanUpTokenRegex1.ReplaceAllString(userInput, "-t=xxx ")
 	userInput = cleanUpTokenRegex2.ReplaceAllString(userInput, "-t xxx ")
+	userInput = cleanUpTokenRegex3.ReplaceAllString(userInput, "-token=xxx ")
+	userInput = cleanUpTokenRegex4.ReplaceAllString(userInput, "-token xxx ")
 	doLog(LEVEL_INFO, "User input command \"%s\"", userInput)
 }
 
