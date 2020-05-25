@@ -87,6 +87,7 @@ func initCommands() {
 		initCat,
 		initHash,
 		initDirectDownload,
+		initBucketPolicyCommand,
 	}
 
 	if assist.IsHec() {

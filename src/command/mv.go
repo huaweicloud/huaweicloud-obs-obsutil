@@ -66,6 +66,7 @@ func (c *transferCommand) scanObsDirAndDoAction(scan ScanObsDirCtx) (totalCount 
 	input.Bucket = request.src.bucket
 	input.Prefix = request.src.key
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	for {
 		if atomic.LoadInt32(&c.abort) == 1 {
 			return
@@ -184,6 +185,7 @@ func (c *mvCommand) doScanEmptyDir(bucket, dirKey string, totalCnt *int64, wg *s
 		input.Prefix = dirKey
 		input.Delimiter = "/"
 		input.MaxKeys = defaultListMaxKeys
+		input.RequestPayer = c.payer
 		for {
 			start := assist.GetUtcNow()
 			output, err := obsClient.ListObjects(input)
@@ -537,7 +539,7 @@ func (c *mvCommand) moveDir(request MoveRequestInput) error {
 
 // batchFlag: {0 single object, 1 single object and must record, 2 multi object}
 func (c *mvCommand) moveObject(request MoveRequestInput, barCh progress.SingleBarChan, batchFlag int, fastFailed error) int {
-	srcMetaContext, srcMetaErr := getObjectMetadata(request.src.bucket, request.src.key, request.src.versionId)
+	srcMetaContext, srcMetaErr := getObjectMetadata(request.src.bucket, request.src.key, request.src.versionId, c.payer)
 	request.src.metaContext = srcMetaContext
 	var count int64 = 1
 	if srcMetaErr == nil {
@@ -553,6 +555,7 @@ func (c *transferCommand) doRename(request MoveRequestInput, barCh progress.Sing
 	input.Bucket = request.src.bucket
 	input.Key = request.src.key
 	input.NewObjectKey = request.dst.key
+	input.RequestPayer = c.payer
 	if output, err := obsClient.RenameFile(input); err != nil {
 		if index := strings.Index(input.NewObjectKey, "/"); index >= 0 {
 			// the destination parant folder may not exist
@@ -560,6 +563,7 @@ func (c *transferCommand) doRename(request MoveRequestInput, barCh progress.Sing
 				newFolderInput := &obs.NewFolderInput{}
 				newFolderInput.Bucket = request.dst.bucket
 				newFolderInput.Key = input.NewObjectKey[:index+1]
+				newFolderInput.RequestPayer = c.payer
 				_, newFolderErr := obsClient.NewFolder(newFolderInput)
 				if newFolderErr == nil {
 					if _output, _err := obsClient.RenameFile(input); _err != nil {
@@ -592,6 +596,7 @@ func (c *transferCommand) doRenameDir(request MoveRequestInput) (status int, req
 	input.Bucket = request.src.bucket
 	input.Key = request.src.key
 	input.NewObjectKey = request.dst.key
+	input.RequestPayer = c.payer
 	if output, err := obsClient.RenameFolder(input); err != nil {
 		renameError = err
 	} else {
@@ -657,6 +662,11 @@ func initMv() command {
 
 		if err != nil {
 			printError(err)
+			return assist.ErrInvalidArgs
+		}
+
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
 			return assist.ErrInvalidArgs
 		}
 
@@ -744,6 +754,7 @@ func initMv() command {
 				input := &obs.GetAttributeInput{}
 				input.Bucket = src.bucket
 				input.Key = src.key
+				input.RequestPayer = c.payer
 				if output, err := obsClient.GetAttribute(input); err != nil {
 					printError(err)
 					return assist.ErrExecuting
@@ -861,10 +872,10 @@ func initMv() command {
 		printf("%2s%s", "", p.Sprintf("move objects"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil mv obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil mv obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil mv obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-cpd=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil mv obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-cpd=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -932,6 +943,7 @@ func initMv() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 	return c
 }

@@ -70,6 +70,7 @@ type downloadPartTask struct {
 	objectInfo  ObjectInfo
 	requestUrl  interface{}
 	checkStatus bool
+	payer       string
 }
 
 type downloadPartResult struct {
@@ -96,6 +97,7 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 		input.VersionId = t.versionId
 		input.RangeStart = t.rangeStart
 		input.RangeEnd = t.rangeEnd
+		input.RequestPayer = t.payer
 		output, err = obsClient.GetObject(input)
 	} else {
 		requestHeaders := make(map[string][]string, 2)
@@ -238,7 +240,7 @@ func (t *downloadPartTask) downloadPart() (ret downloadPartResult, noRepeatable 
 		}
 	}
 
-	if changedErr := checkSourceChangedForDownload(t.bucket, t.key, t.versionId, t.objectInfo.LastModified, t.abort); changedErr != nil {
+	if changedErr := checkSourceChangedForDownload(t.bucket, t.key, t.versionId, t.objectInfo.LastModified, t.abort, t.payer); changedErr != nil {
 		downloadPartError = &errorWrapper{
 			err:       changedErr,
 			requestId: output.RequestId,
@@ -298,9 +300,9 @@ func (t *downloadPartTask) Run() interface{} {
 	return result
 }
 
-func checkSourceChangedForDownload(bucket, key, versionId string, originLastModified int64, abort *int32) error {
+func checkSourceChangedForDownload(bucket, key, versionId string, originLastModified int64, abort *int32, payer string) error {
 	if config["checkSourceChange"] == c_true {
-		if metaContext, err := getObjectMetadata(bucket, key, versionId); err != nil {
+		if metaContext, err := getObjectMetadata(bucket, key, versionId, payer); err != nil {
 			if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode == 404 {
 				if abort != nil {
 					atomic.CompareAndSwapInt32(abort, 0, 1)
@@ -452,7 +454,7 @@ func (c *transferCommand) downloadSmallFile(bucket, key, versionId, fileUrl stri
 	input.Bucket = bucket
 	input.Key = key
 	input.VersionId = versionId
-
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetObject(input)
 	if err != nil {
 		downloadFileError = err
@@ -589,7 +591,7 @@ func (c *transferCommand) downloadSmallFile(bucket, key, versionId, fileUrl stri
 
 	}
 
-	if changedErr := checkSourceChangedForDownload(bucket, key, versionId, metaContext.LastModified.Unix(), nil); changedErr != nil {
+	if changedErr := checkSourceChangedForDownload(bucket, key, versionId, metaContext.LastModified.Unix(), nil, c.payer); changedErr != nil {
 		downloadFileError = &errorWrapper{
 			err:       changedErr,
 			requestId: output.RequestId,
@@ -762,6 +764,7 @@ func (c *parallelContextCommand) downloadBigFileConcurrent(dfc *DownloadFileChec
 				objectInfo:  dfc.ObjectInfo,
 				requestUrl:  requestUrl,
 				checkStatus: checkStatus,
+				payer:       c.payer,
 			}
 			pool.ExecuteFunc(func() interface{} {
 				ret := task.Run()
@@ -1178,6 +1181,7 @@ func (c *transferCommand) submitDownloadTask(bucket, dir, folder, relativePrefix
 	input.Bucket = bucket
 	input.Prefix = dir
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	for {
 		if atomic.LoadInt32(&c.abort) == 1 {
 			return
@@ -1354,6 +1358,6 @@ func (c *transferCommand) downloadDir(bucket, dir, folder string, folderStat os.
 
 func (c *transferCommand) downloadFile(bucket, key, versionId, fileUrl string, fileStat os.FileInfo,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
-	metaContext, metaErr := getObjectMetadata(bucket, key, versionId)
+	metaContext, metaErr := getObjectMetadata(bucket, key, versionId, c.payer)
 	return c.downloadFileWithMetaContext(bucket, key, versionId, metaContext, metaErr, fileUrl, fileStat, barCh, limiter, batchFlag, fastFailed)
 }

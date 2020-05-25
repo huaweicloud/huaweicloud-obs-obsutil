@@ -45,6 +45,7 @@ type shareCrtCommand struct {
 func (c *shareCrtCommand) getBucketVersion(bucket string) string {
 	input := &obs.GetBucketMetadataInput{}
 	input.Bucket = bucket
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetBucketMetadata(input)
 	obsVersion := OBS_VERSION_UNKNOWN
 	if err == nil {
@@ -97,6 +98,7 @@ func initShareCrt() command {
 		c.flagSet.StringVar(&c.accessCode, "ac", "", "")
 		c.flagSet.StringVar(&c.validityPeriod, "vp", "1d", "")
 		c.flagSet.StringVar(&c.downloadUrl, "dst", "", "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
@@ -109,6 +111,10 @@ func initShareCrt() command {
 		bucket, prefix, err := c.splitCloudUrl(cloudUrl)
 		if err != nil {
 			printError(err)
+			return assist.ErrInvalidArgs
+		}
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
 			return assist.ErrInvalidArgs
 		}
 
@@ -226,7 +232,7 @@ func initShareCrt() command {
 		printf("%2s%s", "", p.Sprintf("create authorization code for sharing"))
 		printf("")
 		p.Printf("Syntax:")
-		printf("%2s%s", "", "obsutil create-share obs://bucket[/prefix] [-ac=xxx] [-vp=xxx] [-dst=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil create-share obs://bucket[/prefix] [-ac=xxx] [-vp=xxx] [-dst=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -243,6 +249,7 @@ func initShareCrt() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

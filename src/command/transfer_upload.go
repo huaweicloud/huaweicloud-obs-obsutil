@@ -96,6 +96,7 @@ type uploadPartTask struct {
 	barCh      progress.SingleBarChan
 	limiter    *ratelimit.RateLimiter
 	fileInfo   FileInfo
+	payer      string
 }
 
 func (t *uploadPartTask) Run() interface{} {
@@ -141,6 +142,7 @@ func (t *uploadPartTask) Run() interface{} {
 	input.Body = body
 	input.PartSize = t.partSize
 	input.PartNumber = t.partNumber
+	input.RequestPayer = t.payer
 	output, err := obsClient.UploadPart(input)
 
 	if err == nil {
@@ -241,6 +243,7 @@ func (c *transferCommand) uploadFolder(bucket, key, arcDir, folderUrl string, fo
 	input.ACL = aclType
 	input.ContentLength = 0
 	input.StorageClass = storageClassType
+	input.RequestPayer = c.payer
 	start := assist.GetUtcNow()
 	output, err := obsClient.PutObject(input)
 
@@ -309,6 +312,7 @@ func (c *transferCommand) prepareUploadFileCheckpoint(bucket, key, fileUrl strin
 	input.Metadata = metadata
 	input.ACL = aclType
 	input.StorageClass = storageClassType
+	input.RequestPayer = c.payer
 	output, err := obsClient.InitiateMultipartUpload(input)
 	if err != nil {
 		return err
@@ -406,6 +410,7 @@ func (c *transferCommand) uploadBigFileConcurrent(ufc *UploadFileCheckpoint, che
 				limiter:    limiter,
 				verifyMd5:  c.verifyMd5,
 				fileInfo:   ufc.FileInfo,
+				payer:      c.payer,
 			}
 
 			pool.ExecuteFunc(func() interface{} {
@@ -464,6 +469,7 @@ func (c *transferCommand) uploadBigFileSerial(ufc *UploadFileCheckpoint, checkpo
 			limiter:    limiter,
 			verifyMd5:  c.verifyMd5,
 			writer:     _writer,
+			payer:      c.payer,
 		}
 		result := task.Run()
 		if partETag, ok := result.(PartEtag); ok {
@@ -496,6 +502,7 @@ func (c *transferCommand) completeMultipartUploadForUploadFile(ufc *UploadFileCh
 		parts = append(parts, part)
 	}
 	input.Parts = parts
+	input.RequestPayer = c.payer
 	output, err := obsClient.CompleteMultipartUpload(input)
 	if err == nil {
 		doLog(LEVEL_DEBUG, "Complete multipart upload [%s] in the bucket [%s] successfully, request id [%s]", ufc.Key, ufc.Bucket, output.RequestId)
@@ -735,6 +742,7 @@ func (c *transferCommand) uploadSmallFile(bucket, key, fileUrl string, fileStat 
 	}
 
 	input.Body = body
+	input.RequestPayer = c.payer
 	output, err := obsClient.PutObject(input)
 
 	if barChFlag {
@@ -905,7 +913,7 @@ func (c *transferCommand) afterUploadFile(bucket, key, fileUrl string, metadata 
 			c.recordWarnMessage(warnMessage, warnLoggerMessage)
 		}
 	} else if c.verifyLength {
-		if metaContext, err := getObjectMetadata(bucket, key, ""); err == nil {
+		if metaContext, err := getObjectMetadata(bucket, key, "", c.payer); err == nil {
 			if metaContext.Size != fileSize {
 				doLog(LEVEL_ERROR, "Verify length failed after uploading file [%s], local length [%d] remote length [%d], will try to delete uploaded key", fileUrl, fileSize, metaContext.Size)
 				if _requestId, _err := c.deleteObject(bucket, key, ""); _err == nil {

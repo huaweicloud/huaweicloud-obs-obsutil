@@ -79,6 +79,7 @@ type copyPartTask struct {
 	verifyMd5    bool
 	crr          bool
 	objectInfo   ObjectInfo
+	payer        string
 }
 
 type copyPartResult struct {
@@ -102,9 +103,10 @@ func (t *copyPartTask) Run() interface{} {
 		input.CopySourceRangeStart = t.rangeStart
 		input.CopySourceRangeEnd = t.rangeEnd
 		input.PartNumber = t.partNumber
+		input.RequestPayer = t.payer
 		output, err := obsClient.CopyPart(input)
 		if err == nil {
-			if changedErr := checkSourceChangedForCopy(t.srcBucket, t.srcKey, t.srcVersionId, t.objectInfo.LastModified, t.abort); changedErr != nil {
+			if changedErr := checkSourceChangedForCopy(t.srcBucket, t.srcKey, t.srcVersionId, t.objectInfo.LastModified, t.abort, t.payer); changedErr != nil {
 				return &errorWrapper{
 					err:       changedErr,
 					requestId: output.RequestId,
@@ -156,13 +158,13 @@ func (t *copyPartTask) Run() interface{} {
 	return result
 }
 
-func checkSourceChangedForCopy(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32) error {
-	return checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId, originLastModified, abort, obsClient)
+func checkSourceChangedForCopy(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32, payer string) error {
+	return checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId, originLastModified, abort, obsClient, payer)
 }
 
-func checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32, client *obs.ObsClient) error {
+func checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32, client *obs.ObsClient, payer string) error {
 	if config["checkSourceChange"] == c_true {
-		if metaContext, err := getObjectMetadataByClient(srcBucket, srcKey, srcVersionId, client); err != nil {
+		if metaContext, err := getObjectMetadataByClient(srcBucket, srcKey, srcVersionId, client, payer); err != nil {
 			if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode == 404 {
 				if abort != nil {
 					atomic.CompareAndSwapInt32(abort, 0, 1)
@@ -182,7 +184,7 @@ func checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId string, o
 func (c *transferCommand) ensureKeyForCopy(srcMetaContext *MetaContext, srcMetaErr error, dstBucket string, dstKey string) (bool, error) {
 	var changed bool
 	if srcMetaErr == nil {
-		dstMetaContext, dstMetaErr := getObjectMetadata(dstBucket, dstKey, "")
+		dstMetaContext, dstMetaErr := getObjectMetadata(dstBucket, dstKey, "", c.payer)
 		if dstMetaErr != nil {
 			changed = true
 		} else {
@@ -205,6 +207,7 @@ func (c *transferCommand) copySmallObject(srcBucket, srcKey, versionId, dstBucke
 	input.CopySourceKey = srcKey
 	input.ACL = aclType
 	input.CopySourceVersionId = versionId
+	input.RequestPayer = c.payer
 
 	if metadata == nil || len(metadata) == 0 {
 		input.StorageClass = storageClassType
@@ -223,7 +226,7 @@ func (c *transferCommand) copySmallObject(srcBucket, srcKey, versionId, dstBucke
 	}
 	output, err := obsClient.CopyObject(input)
 	if err == nil {
-		if changedErr := checkSourceChangedForCopy(srcBucket, srcKey, versionId, srcMetaContext.LastModified.Unix(), nil); changedErr != nil {
+		if changedErr := checkSourceChangedForCopy(srcBucket, srcKey, versionId, srcMetaContext.LastModified.Unix(), nil, c.payer); changedErr != nil {
 			return 0, "", &errorWrapper{
 				err:       changedErr,
 				requestId: output.RequestId,
@@ -265,6 +268,7 @@ func (c *transferCommand) prepareCopyObjectCheckpointByClient(srcBucket, srcKey,
 	input.WebsiteRedirectLocation = webredirectLocation
 	input.Metadata = _metadata
 	input.ACL = aclType
+	input.RequestPayer = c.payer
 	if storageClassType == "" {
 		input.StorageClass = storageClass
 	} else {
@@ -350,6 +354,7 @@ func (c *transferCommand) completeMultipartUploadForCopyObject(cfc *CopyObjectCh
 	input.Bucket = cfc.DestinationBucket
 	input.Key = cfc.DestinationKey
 	input.UploadId = cfc.UploadId
+	input.RequestPayer = c.payer
 	parts := make([]obs.Part, 0, len(cfc.CopyParts))
 	for _, copyPart := range cfc.CopyParts {
 		part := obs.Part{
@@ -398,6 +403,7 @@ func (c *transferCommand) copyBigObjectConcurrent(cfc *CopyObjectCheckpoint, che
 				verifyMd5:    c.verifyMd5,
 				crr:          c.crr,
 				objectInfo:   cfc.ObjectInfo,
+				payer:        c.payer,
 			}
 
 			_copyPart := copyPart
@@ -730,6 +736,7 @@ func (c *transferCommand) submitCopyTask(srcBucket, srcDir, dstBucket, dstDir, r
 	input.Bucket = srcBucket
 	input.Prefix = srcDir
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	var client *obs.ObsClient
 	if c.crr {
 		client = obsClientCrr
@@ -933,7 +940,7 @@ func (c *transferCommand) copyDir(srcBucket, srcDir, dstBucket, dstDir string, m
 
 func (c *transferCommand) copyObject(srcBucket, srcKey, versionId, dstBucket, dstKey string, metadata map[string]string, aclType obs.AclType, storageClassType obs.StorageClassType,
 	barCh progress.SingleBarChan, batchFlag int, fastFailed error) int {
-	srcMetaContext, srcMetaErr := getObjectMetadata(srcBucket, srcKey, versionId)
+	srcMetaContext, srcMetaErr := getObjectMetadata(srcBucket, srcKey, versionId, c.payer)
 	var count int64 = 1
 	if srcMetaErr == nil {
 		count = c.caculateCount(srcMetaContext.Size, false)

@@ -21,11 +21,12 @@ import (
 
 type statCommand struct {
 	cloudUrlCommand
-	acl bool
+	acl   bool
+	payer string
 }
 
 func (c *statCommand) getBucketStorageInfo(bucket string) (int, int64, error) {
-	output, err := obsClient.GetBucketStorageInfo(bucket)
+	output, err := obsClient.GetBucketStorageInfo(bucket, obs.WithReqPaymentHeader(c.payer))
 	if err == nil {
 		return output.ObjectNumber, output.Size, nil
 	}
@@ -35,7 +36,7 @@ func (c *statCommand) getBucketStorageInfo(bucket string) (int, int64, error) {
 }
 
 func (c *statCommand) getBucketQuota(bucket string) (int64, error) {
-	output, err := obsClient.GetBucketQuota(bucket)
+	output, err := obsClient.GetBucketQuota(bucket, obs.WithReqPaymentHeader(c.payer))
 	if err == nil {
 		return output.Quota, nil
 	}
@@ -43,7 +44,7 @@ func (c *statCommand) getBucketQuota(bucket string) (int64, error) {
 }
 
 func (c *statCommand) getBucketAcl(bucket string) string {
-	output, err := obsClient.GetBucketAcl(bucket)
+	output, err := obsClient.GetBucketAcl(bucket, obs.WithReqPaymentHeader(c.payer))
 	if err == nil {
 		return c.parseAccessControlPolicy(output.AccessControlPolicy)
 	}
@@ -55,6 +56,7 @@ func (c *statCommand) getObjectAcl(bucket, key string) string {
 	input := &obs.GetObjectAclInput{}
 	input.Bucket = bucket
 	input.Key = key
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetObjectAcl(input)
 	if err == nil {
 		return c.parseAccessControlPolicy(output.AccessControlPolicy)
@@ -135,6 +137,7 @@ func (c *statCommand) parseAccessControlPolicy(acp obs.AccessControlPolicy) stri
 func (c *statCommand) getBucketAttribute(bucket string) error {
 	input := &obs.GetBucketFSStatusInput{}
 	input.Bucket = bucket
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetBucketFSStatus(input)
 	if err == nil {
 		objectNumber, size, storageInfoErr := c.getBucketStorageInfo(bucket)
@@ -194,6 +197,7 @@ func (c *statCommand) getObjectAttribute(bucket, key string) error {
 	input := &obs.GetAttributeInput{}
 	input.Bucket = bucket
 	input.Key = key
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetAttribute(input)
 	if err == nil {
 		aclResult := ""
@@ -269,6 +273,7 @@ func initStat() command {
 
 	c.define = func() {
 		c.flagSet.BoolVar(&c.acl, "acl", false, "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
@@ -281,6 +286,12 @@ func initStat() command {
 		bucket, key, err := c.splitCloudUrl(cloudUrl)
 		if err != nil {
 			printError(err)
+			return assist.ErrInvalidArgs
+		}
+
+		_, ok := getRequestPayerType(c.payer)
+		if !ok {
+			printf("Error: Invalid args, please refer to help doc")
 			return assist.ErrInvalidArgs
 		}
 
@@ -298,10 +309,10 @@ func initStat() command {
 		printf("%2s%s", "", p.Sprintf("show the properties of a bucket or an object"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil stat obs://bucket [-acl] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil stat obs://bucket [-acl] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil stat obs://bucket/key [-acl] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil stat obs://bucket/key [-acl] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -312,6 +323,7 @@ func initStat() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

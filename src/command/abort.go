@@ -38,6 +38,7 @@ func (c *abortCommand) abortMultipartUpload(bucket, key, uploadId string, batchF
 		input.Bucket = bucket
 		input.Key = key
 		input.UploadId = uploadId
+		input.RequestPayer = c.payer
 		return obsClient.AbortMultipartUpload(input)
 	}
 	recordHandler := func(cost int64, output *obs.BaseModel, err error) {
@@ -73,6 +74,7 @@ func (c *abortCommand) submitAbortTask(bucket, prefix string, pool concurrent.Po
 	input.Bucket = bucket
 	input.Prefix = prefix
 	input.MaxUploads = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	for {
 		if atomic.LoadInt32(&c.abort) == 1 {
 			return
@@ -146,9 +148,17 @@ func initAbort() command {
 		c.flagSet.IntVar(&c.jobs, "j", 0, "")
 		c.flagSet.StringVar(&c.uploadId, "u", "", "")
 		c.flagSet.StringVar(&c.outDir, "o", "", "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
+		checkParamsFunc := func(prefix string) bool {
+			_, ok := getRequestPayerType(c.payer)
+			if !ok {
+				return false
+			}
+			return true
+		}
 		confirmFunc := func(bucket, prefix string) bool {
 			return confirm(fmt.Sprintf("Do you want abort multipart upload [%s] in the bucket [%s] ? Please input (y/n) to confirm:", prefix, bucket))
 		}
@@ -158,11 +168,12 @@ func initAbort() command {
 			}
 			return assist.ErrExecuting
 		}
+
 		recursivePrefixFun := func(bucket, prefix string) error {
 			return c.abortMultipartUploads(bucket, prefix)
 		}
 
-		return c.chooseAction(nil, nil, confirmFunc, prefixFunc, recursivePrefixFun, c.recordStartFunc)
+		return c.chooseAction(checkParamsFunc, nil, confirmFunc, prefixFunc, recursivePrefixFun, c.recordStartFunc)
 	}
 
 	c.help = func() {
@@ -171,10 +182,10 @@ func initAbort() command {
 		printf("%2s%s\n", "", p.Sprintf("abort multipart uploads"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil abort obs://bucket/key -u=xxx [-f] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil abort obs://bucket/key -u=xxx [-f] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil abort obs://bucket/[prefix] -r [-f] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil abort obs://bucket/[prefix] -r [-f] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -200,6 +211,7 @@ func initAbort() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

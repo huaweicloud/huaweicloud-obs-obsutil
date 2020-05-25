@@ -46,6 +46,7 @@ type storageClassResult struct {
 func (c *lsCommand) getBucketStorageClass(bucket string) *storageClassResult {
 	input := &obs.GetBucketMetadataInput{}
 	input.Bucket = bucket
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetBucketMetadata(input)
 	if err == nil {
 		return &storageClassResult{bucket: bucket, storageClass: transStorageClassType(output.StorageClass)}
@@ -165,6 +166,7 @@ func (c *lsCommand) listVersions(bucket, prefix string) error {
 	input.Prefix = prefix
 	input.KeyMarker = c.marker
 	input.VersionIdMarker = c.versionIdMarker
+	input.RequestPayer = c.payer
 	if c.dir {
 		input.Delimiter = "/"
 		if input.Prefix != "" && !isObsFolder(input.Prefix) {
@@ -328,6 +330,7 @@ func (c *lsCommand) listObjects(bucket, prefix string) error {
 	input.Bucket = bucket
 	input.Prefix = prefix
 	input.Marker = c.marker
+	input.RequestPayer = c.payer
 	if c.dir {
 		input.Delimiter = "/"
 		if input.Prefix != "" && !isObsFolder(input.Prefix) {
@@ -425,6 +428,7 @@ func (c *lsCommand) listMultipartUploads(bucket, prefix string) error {
 	input.Prefix = prefix
 	input.KeyMarker = c.marker
 	input.UploadIdMarker = c.uploadIdMarker
+	input.RequestPayer = c.payer
 	if c.dir {
 		input.Delimiter = "/"
 		if input.Prefix != "" && !isObsFolder(input.Prefix) {
@@ -565,6 +569,7 @@ func initLs() command {
 		c.flagSet.StringVar(&c.bytesFormat, "bf", "", "")
 		c.flagSet.Int64Var(&c.limit, "limit", 1000, "")
 		c.flagSet.IntVar(&c.jobs, "j", 0, "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.emptyArgsAction = func() error {
@@ -586,6 +591,11 @@ func initLs() command {
 		bucket, prefix, err := c.splitCloudUrl(cloudUrl)
 		if err != nil {
 			printError(err)
+			return assist.ErrInvalidArgs
+		}
+
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
 			return assist.ErrInvalidArgs
 		}
 
@@ -627,10 +637,10 @@ func initLs() command {
 		printf("%2s%s", "", "obsutil ls [-s] [-sc] [-j=1] [-limit=1] [-config=xxx]"+commandCommonSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] [-marker=xxx] [-versionIdMarker=xxx] [-bf=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] [-marker=xxx] [-versionIdMarker=xxx] [-bf=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] -m [-a] [-uploadIdMarker=xxx] [-marker=xxx] [-versionIdMarker=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil ls obs://bucket[/prefix] [-s] [-d] [-v] -m [-a] [-uploadIdMarker=xxx] [-marker=xxx] [-versionIdMarker=xxx] [-limit=1] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")

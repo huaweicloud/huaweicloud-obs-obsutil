@@ -40,6 +40,7 @@ func (c *signCommand) generateDownloadUrl(bucket, key string, batchFlag bool) bo
 	input.Key = key
 	input.Method = obs.HTTP_GET
 	input.Expires = c.expires
+	input.RequestPayer = c.payer
 	output, err := obsClient.CreateSignedUrl(input)
 
 	if batchFlag {
@@ -69,6 +70,7 @@ func (c *signCommand) generateDownloadUrls(bucket, prefix string) error {
 	input.Bucket = bucket
 	input.Prefix = prefix
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	action := "generate download url(s)"
 	var hasListError error
 
@@ -148,6 +150,7 @@ func initSign() command {
 		c.flagSet.StringVar(&c.include, "include", "", "")
 		c.flagSet.StringVar(&c.exclude, "exclude", "", "")
 		c.flagSet.StringVar(&c.timeRange, "timeRange", "", "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
@@ -165,6 +168,11 @@ func initSign() command {
 		bucket, key, err := c.splitCloudUrl(cloudUrl)
 		if err != nil {
 			printError(err)
+			return assist.ErrInvalidArgs
+		}
+
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
 			return assist.ErrInvalidArgs
 		}
 
@@ -209,10 +217,10 @@ func initSign() command {
 		printf("%2s%s", "", p.Sprintf("generate the download url(s) for the objects in a specified bucket"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil sign obs://bucket/key [-e=300] [-config=xxx]"+signCommandCommonSyntax())
+		printf("%2s%s", "", "obsutil sign obs://bucket/key [-e=300] [-config=xxx]"+signCommandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil sign obs://bucket[/prefix] -r [-e=300] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-o=xxx] [-config=xxx]"+signCommandCommonSyntax())
+		printf("%2s%s", "", "obsutil sign obs://bucket[/prefix] -r [-e=300] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-o=xxx] [-config=xxx]"+signCommandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -251,6 +259,7 @@ func initSign() command {
 			printf("%4s%s", "", p.Sprintf("security token"))
 			printf("")
 		}
+		commandRequestPayerHelp(p)
 	}
 
 	return c

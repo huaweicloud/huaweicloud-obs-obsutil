@@ -585,6 +585,10 @@ func initCp() command {
 		if !c.prepareOptions() {
 			return assist.ErrInvalidArgs
 		}
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
+			return assist.ErrInvalidArgs
+		}
 
 		var ret error
 		if mode == um {
@@ -614,28 +618,28 @@ func initCp() command {
 		printf("%2s%s", "", p.Sprintf("upload, download or copy objects"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil cp file_url|folder_url obs://bucket[/key] [-dryRun] [-link] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp file_url|folder_url obs://bucket[/key] [-dryRun] [-link] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-arcDir=xxx] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil cp folder_url obs://bucket[/prefix] -r [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp folder_url obs://bucket[/prefix] -r [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil cp file1_url,folder1_url|filelist_url obs://bucket[/prefix] -msm=1 [-r] [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp file1_url,folder1_url|filelist_url obs://bucket[/prefix] -msm=1 [-r] [-dryRun] [-link] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 4:")
-		printf("%2s%s", "", "obsutil cp obs://bucket/key file_url|folder_url [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp obs://bucket/key file_url|folder_url [-dryRun] [-tempFileDir=xxx] [-u] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 5:")
-		printf("%2s%s", "", "obsutil cp obs://bucket[/prefix] folder_url -r [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-at] [-disableDirObject] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp obs://bucket[/prefix] folder_url -r [-dryRun] [-tempFileDir=xxx] [-f] [-u] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-at] [-disableDirObject] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 6:")
-		printf("%2s%s", "", "obsutil cp obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-crr] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp obs://srcbucket/key obs://dstbucket/[dest] [-dryRun] [-u] [-crr] [-vlength] [-vmd5] [-p=1] [-threshold=52428800] [-versionId=xxx] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-cpd=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 7:")
-		printf("%2s%s", "", "obsutil cp obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-crr] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp obs://srcbucket[/src_prefix] obs://dstbucket[/dest_prefix] -r [-dryRun] [-f] [-u] [-crr] [-vlength] [-vmd5] [-flat] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 8:")
-		printf("%2s%s", "", "obsutil cp -recover=xxx [-dryRun] [-crr] [-f] [-u] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-tempFileDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil cp -recover=xxx [-dryRun] [-crr] [-f] [-u] [-vlength] [-vmd5] [-j=1] [-p=1] [-threshold=52428800] [-acl=xxx] [-sc=xxx] [-meta=aaa:bbb#ccc:ddd] [-ps=auto] [-include=*.xxx] [-exclude=*.xxx] [-timeRange=time1-time2] [-mf] [-arcDir=xxx] [-tempFileDir=xxx] [-o=xxx] [-cpd=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -733,6 +737,7 @@ func initCp() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 	return c
 }

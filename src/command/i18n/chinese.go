@@ -45,6 +45,7 @@ func (m messageBuilderCn) buildMessage(printers map[language.Tag]*PrinterWrapper
 	m.setCatStrings()
 	m.setHashStrings()
 	m.setDirectDownloadStrings()
+	m.setBucketPolicyStrings()
 }
 
 func (messageBuilderCn) setCommonStrings() {
@@ -308,4 +309,10 @@ func (messageBuilderCn) setHashStrings() {
 
 func (messageBuilderCn) setDirectDownloadStrings() {
 	message.SetString(language.Chinese, "download an object directly using the specified resource url", "使用指定的资源链接支持下载对象")
+}
+
+func (messageBuilderCn) setBucketPolicyStrings() {
+	message.SetString(language.Chinese, "get, put or delete bucket policy", "获取，设置或者删除桶策略")
+	message.SetString(language.Chinese, "the operation you want to do,possible values are [get, put, delete]", "操作类型，支持的值：[get|put|delete]")
+	message.SetString(language.Chinese, "the policy json file which you want to get or put, only support when method is get or put", "策略文件的路径，只有当操作类型为put或者get才支持")
 }

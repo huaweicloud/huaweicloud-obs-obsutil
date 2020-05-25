@@ -31,6 +31,7 @@ func (t *copyPartTask) copyPartCrr() (ret copyPartResult, noRepeatable bool, rea
 	input.VersionId = t.srcVersionId
 	input.RangeStart = t.rangeStart
 	input.RangeEnd = t.rangeEnd
+	input.RequestPayer = t.payer
 
 	output, err := obsClientCrr.GetObject(input)
 	if err != nil {
@@ -70,6 +71,7 @@ func (t *copyPartTask) copyPartCrr() (ret copyPartResult, noRepeatable bool, rea
 	uploadPartInput.Body = body
 	uploadPartInput.PartSize = partSize
 	uploadPartInput.PartNumber = t.partNumber
+	uploadPartInput.RequestPayer = t.payer
 	var uploadPartOutput *obs.UploadPartOutput
 	uploadPartOutput, err = obsClient.UploadPart(uploadPartInput)
 
@@ -85,7 +87,7 @@ func (t *copyPartTask) copyPartCrr() (ret copyPartResult, noRepeatable bool, rea
 		return
 	}
 
-	if changedErr := checkSourceChangedForCopyCrr(t.srcBucket, t.srcKey, t.srcVersionId, t.objectInfo.LastModified, t.abort); changedErr != nil {
+	if changedErr := checkSourceChangedForCopyCrr(t.srcBucket, t.srcKey, t.srcVersionId, t.objectInfo.LastModified, t.abort, t.payer); changedErr != nil {
 		copyPartError = &errorWrapper{
 			err:       changedErr,
 			requestId: uploadPartOutput.RequestId,
@@ -130,8 +132,8 @@ func (c *transferCommand) createObsClientCrr() bool {
 	return true
 }
 
-func (c *transferCommand) getObjectMetadataCrr(bucket, key, versionId string) (*MetaContext, error) {
-	return getObjectMetadataByClient(bucket, key, versionId, obsClientCrr)
+func (c *transferCommand) getObjectMetadataCrr(bucket, key, versionId string, payer string) (*MetaContext, error) {
+	return getObjectMetadataByClient(bucket, key, versionId, obsClientCrr, payer)
 }
 
 func (c *transferCommand) ensureBucketCrr(bucket string) error {
@@ -158,8 +160,8 @@ func (c *transferCommand) ensureBucketsAndStartActionCrr(srcBucket string, dstBu
 	return c.ensureOuputAndStartLogger(action, recordCost)
 }
 
-func checkSourceChangedForCopyCrr(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32) error {
-	return checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId, originLastModified, abort, obsClientCrr)
+func checkSourceChangedForCopyCrr(srcBucket, srcKey, srcVersionId string, originLastModified int64, abort *int32, payer string) error {
+	return checkSourceChangedForCopyByClient(srcBucket, srcKey, srcVersionId, originLastModified, abort, obsClientCrr, payer)
 }
 
 func (c *transferCommand) ensureObjectAttributesCrr(bucket, key, versionId string, srcMetaContext *MetaContext, metadata map[string]string) (map[string]string, string, obs.StorageClassType, string) {
@@ -168,7 +170,7 @@ func (c *transferCommand) ensureObjectAttributesCrr(bucket, key, versionId strin
 
 func (c *transferCommand) copyObjectCrr(srcBucket, srcKey, versionId, dstBucket, dstKey string, metadata map[string]string, aclType obs.AclType, storageClassType obs.StorageClassType,
 	barCh progress.SingleBarChan, limiter *ratelimit.RateLimiter, batchFlag int, fastFailed error) int {
-	srcMetaContext, srcMetaErr := c.getObjectMetadataCrr(srcBucket, srcKey, versionId)
+	srcMetaContext, srcMetaErr := c.getObjectMetadataCrr(srcBucket, srcKey, versionId, c.payer)
 	return c.copyObjectCrrWithMetaContext(srcBucket, srcKey, versionId, srcMetaContext, srcMetaErr, dstBucket, dstKey, metadata, aclType, storageClassType, barCh, limiter, batchFlag, fastFailed)
 }
 
@@ -305,7 +307,7 @@ func (c *transferCommand) copyObjectCrrWithMetaContext(srcBucket, srcKey, versio
 				c.recordWarnMessage(warnMessage, warnLoggerMessage)
 			}
 		} else if c.verifyLength {
-			if metaContext, err := getObjectMetadata(dstBucket, dstKey, ""); err == nil {
+			if metaContext, err := getObjectMetadata(dstBucket, dstKey, "", c.payer); err == nil {
 				if metaContext.Size != srcMetaContext.Size {
 					doLog(LEVEL_ERROR, "Verify length failed after copying key [%s] in the bucket [%s], source length [%d] destination length [%d], will try to delete copied key", srcKey, srcBucket, srcMetaContext.Size, metaContext.Size)
 					if _requestId, _err := c.deleteObject(dstBucket, dstKey, ""); _err == nil {
@@ -532,6 +534,7 @@ func (c *transferCommand) copySmallObjectCrrWithRetry(srcBucket, srcKey, version
 	input.Bucket = srcBucket
 	input.Key = srcKey
 	input.VersionId = versionId
+	input.RequestPayer = c.payer
 
 	output, err := obsClientCrr.GetObjectMetadata(input)
 	if err != nil {
@@ -594,7 +597,7 @@ func (c *transferCommand) copySmallObjectCrr(srcBucket, srcKey, versionId, dstBu
 	input.Bucket = srcBucket
 	input.Key = srcKey
 	input.VersionId = versionId
-
+	input.RequestPayer = c.payer
 	output, err := obsClientCrr.GetObject(input)
 	if err != nil {
 		copyObjectError = err
@@ -644,6 +647,7 @@ func (c *transferCommand) copySmallObjectCrr(srcBucket, srcKey, versionId, dstBu
 	putInput.ContentType = contentType
 	putInput.WebsiteRedirectLocation = webredirectLocation
 	putInput.Metadata = _metadata
+	putInput.RequestPayer = c.payer
 	if storageClassType == "" {
 		putInput.StorageClass = storageClass
 	} else {
@@ -661,7 +665,7 @@ func (c *transferCommand) copySmallObjectCrr(srcBucket, srcKey, versionId, dstBu
 		return
 	}
 
-	if changedErr := checkSourceChangedForCopyCrr(srcBucket, srcKey, versionId, srcMetaContext.LastModified.Unix(), nil); changedErr != nil {
+	if changedErr := checkSourceChangedForCopyCrr(srcBucket, srcKey, versionId, srcMetaContext.LastModified.Unix(), nil, c.payer); changedErr != nil {
 		copyObjectError = &errorWrapper{
 			err:       changedErr,
 			requestId: putOutput.RequestId,

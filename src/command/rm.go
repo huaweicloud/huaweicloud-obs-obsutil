@@ -33,7 +33,7 @@ func (c *rmCommand) deleteBucket(bucket string) bool {
 	if !c.force && !confirm(fmt.Sprintf("Do you want delete bucket [%s] ? Please input (y/n) to confirm:", bucket)) {
 		return false
 	}
-	output, err := obsClient.DeleteBucket(bucket)
+	output, err := obsClient.DeleteBucket(bucket, obs.WithReqPaymentHeader(c.payer))
 	if err == nil {
 		printf("Delete bucket [%s] successfully!", bucket)
 		doLog(LEVEL_INFO, "Delete bucket [%s] successfully, request id [%s]", bucket, output.RequestId)
@@ -59,6 +59,7 @@ func (c *rmCommand) deleteObject(bucket, key, versionId string, batchFlag int) b
 		input.Bucket = bucket
 		input.Key = key
 		input.VersionId = versionId
+		input.RequestPayer = c.payer
 		if dropFileOutput, dropErr := obsClient.DropFile(input); dropErr != nil {
 			err = dropErr
 		} else {
@@ -119,6 +120,7 @@ func (c *rmCommand) deleteMultiObjects(bucket string, keys []obs.ObjectToDelete,
 	deleteInput.Quiet = false
 
 	deleteInput.Objects = keys
+	deleteInput.RequestPayer = c.payer
 	start := assist.GetUtcNow()
 
 	deleteOutput, err := obsClient.DeleteObjects(deleteInput)
@@ -183,6 +185,7 @@ func (c *rmCommand) submitDeleteTask(bucket, prefix string, pool concurrent.Pool
 		input.Bucket = bucket
 		input.Prefix = prefix
 		input.MaxKeys = defaultListMaxKeys
+		input.RequestPayer = c.payer
 		for {
 			if atomic.LoadInt32(&c.abort) == 1 {
 				return
@@ -243,6 +246,7 @@ func (c *rmCommand) submitDeleteTask(bucket, prefix string, pool concurrent.Pool
 		input.Bucket = bucket
 		input.Prefix = prefix
 		input.MaxKeys = defaultListMaxKeys
+		input.RequestPayer = c.payer
 		for {
 			if atomic.LoadInt32(&c.abort) == 1 {
 				return
@@ -317,7 +321,7 @@ func (c *rmCommand) doScan(bucket, folder string, pool concurrent.Pool, ch progr
 			input.Prefix = folder
 			input.Delimiter = "/"
 			input.MaxKeys = defaultListMaxKeys
-
+			input.RequestPayer = c.payer
 			for {
 				if atomic.LoadInt32(&c.abort) == 1 {
 					break
@@ -399,6 +403,7 @@ func (c *rmCommand) doScan(bucket, folder string, pool concurrent.Pool, ch progr
 			input.Prefix = folder
 			input.Delimiter = "/"
 			input.MaxKeys = defaultListMaxKeys
+			input.RequestPayer = c.payer
 			for {
 				if atomic.LoadInt32(&c.abort) == 1 {
 					break
@@ -505,9 +510,18 @@ func initRm() command {
 		c.flagSet.StringVar(&c.outDir, "o", "", "")
 		c.flagSet.StringVar(&c.versionId, "versionId", "", "")
 		c.flagSet.IntVar(&c.jobs, "j", 0, "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
+		checkParamsFunc := func(prefix string) bool {
+			_, ok := getRequestPayerType(c.payer)
+			if !ok {
+				return false
+			}
+			return true
+		}
+
 		emptyPrefixFunc := func(bucket string) error {
 			if !c.deleteBucket(bucket) {
 				return assist.ErrExecuting
@@ -536,7 +550,7 @@ func initRm() command {
 			return c.dropFolder(bucket, prefix)
 		}
 
-		return c.chooseAction(nil, emptyPrefixFunc, confirmFunc, prefixFunc, recursivePrefixFun, c.recordStartFunc)
+		return c.chooseAction(checkParamsFunc, emptyPrefixFunc, confirmFunc, prefixFunc, recursivePrefixFun, c.recordStartFunc)
 	}
 
 	c.help = func() {
@@ -548,10 +562,10 @@ func initRm() command {
 		printf("%2s%s", "", "obsutil rm obs://bucket [-f] [-config=xxx]")
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil rm obs://bucket/key [-f] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil rm obs://bucket/key [-f] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil rm obs://bucket/[prefix] -r [-j=1] [-f] [-v] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil rm obs://bucket/[prefix] -r [-j=1] [-f] [-v] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -580,6 +594,7 @@ func initRm() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

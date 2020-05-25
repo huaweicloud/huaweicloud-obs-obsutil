@@ -30,7 +30,9 @@ func initMkdir() command {
 	c.key = "mkdir"
 	c.usage = "cloud_url|folder_url"
 	c.description = "create folder(s) in a specified bucket or in the local file system"
-
+	c.define = func() {
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
+	}
 	c.action = func() error {
 		cloudUrl, err := c.prepareCloudUrl()
 		if err != nil {
@@ -53,6 +55,11 @@ func initMkdir() command {
 			return assist.ErrInvalidArgs
 		}
 
+		_, succeed := getRequestPayerType(c.payer)
+		if !succeed {
+			return assist.ErrInvalidArgs
+		}
+
 		if key == "" {
 			printf("Error: No folder(s) specified to create in the bucket [%s]", bucket)
 			return assist.ErrInvalidArgs
@@ -69,6 +76,7 @@ func initMkdir() command {
 			input := &obs.NewFolderInput{}
 			input.Bucket = bucket
 			input.Key = key
+			input.RequestPayer = c.payer
 			output, err := obsClient.NewFolder(input)
 			if err == nil {
 				printf("Create folder [obs://%s/%s] successfully, request id [%s]", bucket, key, output.RequestId)
@@ -93,6 +101,7 @@ func initMkdir() command {
 		input := &obs.PutObjectInput{}
 		input.Bucket = bucket
 		input.ContentLength = 0
+		input.RequestPayer = c.payer
 		allSucceed := true
 		for _, folder := range folders {
 			current += folder + "/"
@@ -120,7 +129,7 @@ func initMkdir() command {
 		printf("%2s%s", "", p.Sprintf("create folder(s) in a specified bucket or in the local file system"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil mkdir obs://bucket/folder1/folder2/folder3/ [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil mkdir obs://bucket/folder1/folder2/folder3/ [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
 		printf("%2s%s", "", "obsutil mkdir folder_url [-config=xxx]")
@@ -131,6 +140,7 @@ func initMkdir() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

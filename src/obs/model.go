@@ -82,6 +82,7 @@ type BucketStoragePolicy struct {
 type SetBucketStoragePolicyInput struct {
 	Bucket string `xml:"-"`
 	BucketStoragePolicy
+	RequestPayer string `xml:"-"`
 }
 
 type GetBucketStoragePolicyOutput struct {
@@ -99,8 +100,9 @@ type ListObjsInput struct {
 
 type ListObjectsInput struct {
 	ListObjsInput
-	Bucket string
-	Marker string
+	Bucket       string
+	Marker       string
+	RequestPayer string
 }
 
 type Content struct {
@@ -133,6 +135,7 @@ type ListVersionsInput struct {
 	Bucket          string
 	KeyMarker       string
 	VersionIdMarker string
+	RequestPayer    string
 }
 
 type Version struct {
@@ -177,6 +180,7 @@ type ListMultipartUploadsInput struct {
 	Delimiter      string
 	KeyMarker      string
 	UploadIdMarker string
+	RequestPayer   string
 }
 
 type Upload struct {
@@ -213,6 +217,7 @@ type BucketQuota struct {
 type SetBucketQuotaInput struct {
 	Bucket string `xml:"-"`
 	BucketQuota
+	RequestPayer string `xml:"-"`
 }
 
 type GetBucketQuotaOutput struct {
@@ -261,11 +266,13 @@ type SetBucketAclInput struct {
 	Bucket string  `xml:"-"`
 	ACL    AclType `xml:"-"`
 	AccessControlPolicy
+	RequestPayer string
 }
 
 type SetBucketPolicyInput struct {
-	Bucket string
-	Policy string
+	Bucket       string
+	Policy       string
+	RequestPayer string
 }
 
 type GetBucketPolicyOutput struct {
@@ -291,6 +298,7 @@ type BucketCors struct {
 type SetBucketCorsInput struct {
 	Bucket string `xml:"-"`
 	BucketCors
+	RequestPayer string
 }
 
 type GetBucketCorsOutput struct {
@@ -306,6 +314,7 @@ type BucketVersioningConfiguration struct {
 type SetBucketVersioningInput struct {
 	Bucket string `xml:"-"`
 	BucketVersioningConfiguration
+	RequestPayer string `xml:"-"`
 }
 
 type GetBucketVersioningOutput struct {
@@ -359,6 +368,7 @@ type BucketWebsiteConfiguration struct {
 type SetBucketWebsiteConfigurationInput struct {
 	Bucket string `xml:"-"`
 	BucketWebsiteConfiguration
+	RequestPayer string
 }
 
 type GetBucketWebsiteConfigurationOutput struct {
@@ -370,6 +380,7 @@ type GetBucketMetadataInput struct {
 	Bucket        string
 	Origin        string
 	RequestHeader string
+	RequestPayer  string
 }
 
 type GetBucketMetadataOutput struct {
@@ -404,6 +415,7 @@ type BucketLoggingStatus struct {
 type SetBucketLoggingConfigurationInput struct {
 	Bucket string `xml:"-"`
 	BucketLoggingStatus
+	RequestPayer string
 }
 
 type GetBucketLoggingConfigurationOutput struct {
@@ -453,6 +465,7 @@ type BucketLifecyleConfiguration struct {
 type SetBucketLifecycleConfigurationInput struct {
 	Bucket string `xml:"-"`
 	BucketLifecyleConfiguration
+	RequestPayer string
 }
 
 type GetBucketLifecycleConfigurationOutput struct {
@@ -474,6 +487,7 @@ type BucketTagging struct {
 type SetBucketTaggingInput struct {
 	Bucket string `xml:"-"`
 	BucketTagging
+	RequestPayer string
 }
 
 type GetBucketTaggingOutput struct {
@@ -503,6 +517,7 @@ type BucketNotification struct {
 type SetBucketNotificationInput struct {
 	Bucket string `xml:"-"`
 	BucketNotification
+	RequestPayer string
 }
 
 type GetBucketNotificationOutput struct {
@@ -512,9 +527,10 @@ type GetBucketNotificationOutput struct {
 
 type DeleteObjectInput struct {
 	ContextWrapper
-	Bucket    string
-	Key       string
-	VersionId string
+	Bucket       string
+	Key          string
+	VersionId    string
+	RequestPayer string
 }
 
 type DeleteObjectOutput struct {
@@ -525,6 +541,7 @@ type DeleteObjectOutput struct {
 
 type DropFileInput struct {
 	DeleteObjectInput
+	RequestPayer string
 }
 
 type DropFileOutput struct {
@@ -539,10 +556,11 @@ type ObjectToDelete struct {
 
 type DeleteObjectsInput struct {
 	ContextWrapper
-	Bucket  string           `xml:"-"`
-	XMLName xml.Name         `xml:"Delete"`
-	Quiet   bool             `xml:"Quiet,omitempty"`
-	Objects []ObjectToDelete `xml:"Object"`
+	Bucket       string           `xml:"-"`
+	XMLName      xml.Name         `xml:"Delete"`
+	Quiet        bool             `xml:"Quiet,omitempty"`
+	Objects      []ObjectToDelete `xml:"Object"`
+	RequestPayer string
 }
 
 type Deleted struct {
@@ -574,12 +592,14 @@ type SetObjectAclInput struct {
 	VersionId string  `xml:"-"`
 	ACL       AclType `xml:"-"`
 	AccessControlPolicy
+	RequestPayer string
 }
 
 type GetObjectAclInput struct {
-	Bucket    string
-	Key       string
-	VersionId string
+	Bucket       string
+	Key          string
+	VersionId    string
+	RequestPayer string
 }
 
 type GetObjectAclOutput struct {
@@ -589,12 +609,13 @@ type GetObjectAclOutput struct {
 }
 
 type RestoreObjectInput struct {
-	Bucket    string          `xml:"-"`
-	Key       string          `xml:"-"`
-	VersionId string          `xml:"-"`
-	XMLName   xml.Name        `xml:"RestoreRequest"`
-	Days      int             `xml:"Days"`
-	Tier      RestoreTierType `xml:"GlacierJobParameters>Tier,omitempty"`
+	Bucket       string          `xml:"-"`
+	Key          string          `xml:"-"`
+	VersionId    string          `xml:"-"`
+	XMLName      xml.Name        `xml:"RestoreRequest"`
+	Days         int             `xml:"Days"`
+	Tier         RestoreTierType `xml:"GlacierJobParameters>Tier,omitempty"`
+	RequestPayer string
 }
 
 type ISseHeader interface {
@@ -625,6 +646,7 @@ type GetObjectMetadataInput struct {
 	Origin        string
 	RequestHeader string
 	SseHeader     ISseHeader
+	RequestPayer  string
 }
 
 type GetObjectMetadataOutput struct {
@@ -649,6 +671,7 @@ type GetObjectMetadataOutput struct {
 
 type GetAttributeInput struct {
 	GetObjectMetadataInput
+	RequestPayer string
 }
 
 type GetAttributeOutput struct {
@@ -670,6 +693,7 @@ type SetObjectMetadataInput struct {
 	WebsiteRedirectLocation string
 	StorageClass            StorageClassType
 	Metadata                map[string]string
+	RequestPayer            string
 }
 
 type SetObjectMetadataOutput struct {
@@ -701,6 +725,7 @@ type GetObjectInput struct {
 	ResponseContentLanguage    string
 	ResponseContentType        string
 	ResponseExpires            string
+	RequestPayer               string
 }
 
 type GetObjectOutput struct {
@@ -723,6 +748,7 @@ type ObjectOperationInput struct {
 	WebsiteRedirectLocation string
 	SseHeader               ISseHeader
 	Metadata                map[string]string
+	RequestPayer            string
 }
 
 type PutObjectBasicInput struct {
@@ -730,24 +756,29 @@ type PutObjectBasicInput struct {
 	ContentType   string
 	ContentMD5    string
 	ContentLength int64
+	RequestPayer  string
 }
 
 type PutObjectInput struct {
 	PutObjectBasicInput
-	Body io.Reader
+	Body         io.Reader
+	RequestPayer string
 }
 
 type NewFolderInput struct {
 	ObjectOperationInput
+	RequestPayer string
 }
 
 type NewFileInput struct {
 	PutObjectInput
+	RequestPayer string
 }
 
 type PutFileInput struct {
 	PutObjectBasicInput
-	SourceFile string
+	SourceFile   string
+	RequestPayer string
 }
 
 type PutObjectOutput struct {
@@ -784,6 +815,7 @@ type CopyObjectInput struct {
 	ContentType                 string
 	Expires                     string
 	MetadataDirective           MetadataDirectiveType
+	RequestPayer                string
 }
 
 type CopyObjectOutput struct {
@@ -798,14 +830,16 @@ type CopyObjectOutput struct {
 
 type AbortMultipartUploadInput struct {
 	ContextWrapper
-	Bucket   string
-	Key      string
-	UploadId string
+	Bucket       string
+	Key          string
+	UploadId     string
+	RequestPayer string
 }
 
 type InitiateMultipartUploadInput struct {
 	ObjectOperationInput
-	ContentType string
+	ContentType  string
+	RequestPayer string
 }
 
 type InitiateMultipartUploadOutput struct {
@@ -819,16 +853,17 @@ type InitiateMultipartUploadOutput struct {
 
 type UploadPartInput struct {
 	ContextWrapper
-	Bucket     string
-	Key        string
-	PartNumber int
-	UploadId   string
-	ContentMD5 string
-	SseHeader  ISseHeader
-	Body       io.Reader
-	SourceFile string
-	Offset     int64
-	PartSize   int64
+	Bucket       string
+	Key          string
+	PartNumber   int
+	UploadId     string
+	ContentMD5   string
+	SseHeader    ISseHeader
+	Body         io.Reader
+	SourceFile   string
+	Offset       int64
+	PartSize     int64
+	RequestPayer string
 }
 
 type UploadPartOutput struct {
@@ -848,11 +883,12 @@ type Part struct {
 
 type CompleteMultipartUploadInput struct {
 	ContextWrapper
-	Bucket   string   `xml:"-"`
-	Key      string   `xml:"-"`
-	UploadId string   `xml:"-"`
-	XMLName  xml.Name `xml:"CompleteMultipartUpload"`
-	Parts    []Part   `xml:"Part"`
+	Bucket       string   `xml:"-"`
+	Key          string   `xml:"-"`
+	UploadId     string   `xml:"-"`
+	XMLName      xml.Name `xml:"CompleteMultipartUpload"`
+	Parts        []Part   `xml:"Part"`
+	RequestPayer string
 }
 
 type CompleteMultipartUploadOutput struct {
@@ -872,6 +908,7 @@ type ListPartsInput struct {
 	UploadId         string
 	MaxParts         int
 	PartNumberMarker int
+	RequestPayer     string
 }
 
 type ListPartsOutput struct {
@@ -903,6 +940,7 @@ type CopyPartInput struct {
 	CopySourceRangeEnd   int64
 	SseHeader            ISseHeader
 	SourceSseHeader      ISseHeader
+	RequestPayer         string
 }
 
 type CopyPartOutput struct {
@@ -915,14 +953,15 @@ type CopyPartOutput struct {
 }
 
 type CreateSignedUrlInput struct {
-	Method      HttpMethodType
-	Bucket      string
-	Key         string
-	Policy      string
-	SubResource SubResourceType
-	Expires     int
-	Headers     map[string]string
-	QueryParams map[string]string
+	Method       HttpMethodType
+	Bucket       string
+	Key          string
+	Policy       string
+	SubResource  SubResourceType
+	Expires      int
+	Headers      map[string]string
+	QueryParams  map[string]string
+	RequestPayer string
 }
 
 type CreateSignedUrlOutput struct {
@@ -931,10 +970,11 @@ type CreateSignedUrlOutput struct {
 }
 
 type CreateBrowserBasedSignatureInput struct {
-	Bucket     string
-	Key        string
-	Expires    int
-	FormParams map[string]string
+	Bucket       string
+	Key          string
+	Expires      int
+	FormParams   map[string]string
+	RequestPayer string
 }
 
 type CreateBrowserBasedSignatureOutput struct {
@@ -951,6 +991,7 @@ type RenameFileInput struct {
 	Bucket       string
 	Key          string
 	NewObjectKey string
+	RequestPayer string
 }
 
 type RenameFolderInput struct {
@@ -958,6 +999,7 @@ type RenameFolderInput struct {
 	Bucket       string
 	Key          string
 	NewObjectKey string
+	RequestPayer string
 }
 
 type RenameFileOutput struct {

@@ -46,6 +46,7 @@ func (c *restoreCommand) restoreObject(bucket, key, versionId string, restoreTie
 		input.Days = c.days
 		input.Tier = restoreTier
 		input.VersionId = versionId
+		input.RequestPayer = c.payer
 		return obsClient.RestoreObject(input)
 	}
 	recordHandler := func(cost int64, output *obs.BaseModel, err error) {
@@ -140,6 +141,7 @@ func initRestore() command {
 		c.flagSet.StringVar(&c.tier, "t", "expedited", "")
 		c.flagSet.StringVar(&c.versionId, "versionId", "", "")
 		c.flagSet.StringVar(&c.outDir, "o", "", "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
@@ -157,6 +159,10 @@ func initRestore() command {
 					printf("Error: Invalid t [%s], possible values are [standard|expedited]", c.tier)
 					return false
 				}
+			}
+			_, ok := getRequestPayerType(c.payer)
+			if !ok {
+				return false
 			}
 			return true
 		}
@@ -181,10 +187,10 @@ func initRestore() command {
 		printf("%2s%s\n", "", p.Sprintf("restore objects in a bucket to be readable"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil restore obs://bucket/key [-d=1] [-t=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+restoreCommandCommonSyntax())
+		printf("%2s%s", "", "obsutil restore obs://bucket/key [-d=1] [-t=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+restoreCommandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil restore obs://bucket/[prefix] -r [-f] [-v] [-d=1] [-t=xxx] [-o=xxx] [-j=1] [-config=xxx]"+restoreCommandCommonSyntax())
+		printf("%2s%s", "", "obsutil restore obs://bucket/[prefix] -r [-f] [-v] [-d=1] [-t=xxx] [-o=xxx] [-j=1] [-config=xxx]"+restoreCommandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -232,6 +238,7 @@ func initRestore() command {
 			printf("%4s%s", "", p.Sprintf("security token"))
 			printf("")
 		}
+		commandRequestPayerHelp(p)
 	}
 
 	return c

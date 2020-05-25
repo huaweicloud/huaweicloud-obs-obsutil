@@ -70,7 +70,6 @@ type transferCommand struct {
 	rec       string
 	link      bool
 	crr       bool
-
 	//need to be reset in init func
 	folderMap     map[string]string
 	folderMapLock *sync.Mutex
@@ -123,6 +122,7 @@ func (c *transferCommand) defineBasic() {
 	c.flagSet.StringVar(&c.timeRange, "timeRange", "", "")
 	c.flagSet.StringVar(&c.arcDir, "arcDir", "", "")
 	c.flagSet.StringVar(&c.tempFileDir, "tempFileDir", "", "")
+	c.flagSet.StringVar(&c.payer, "payer", "", "")
 }
 
 func (c *transferCommand) needCheckNestedUrl() bool {
@@ -163,10 +163,10 @@ func (c *transferCommand) getRelativeFolder(folder string) string {
 }
 
 func (c *transferCommand) compareLocation(srcBucket, dstBucket string) bool {
-	if output, err := obsClient.GetBucketLocation(srcBucket); err != nil {
+	if output, err := obsClient.GetBucketLocation(srcBucket, obs.WithReqPaymentHeader(c.payer)); err != nil {
 		doLog(LEVEL_WARN, "Cannot get the location of bucket [%s], skip to compare location, %s", srcBucket, err.Error())
 		return true
-	} else if output2, err := obsClient.GetBucketLocation(dstBucket); err != nil {
+	} else if output2, err := obsClient.GetBucketLocation(dstBucket, obs.WithReqPaymentHeader(c.payer)); err != nil {
 		doLog(LEVEL_WARN, "Cannot get the location of bucket [%s], skip to compare location, %s", dstBucket, err.Error())
 		return true
 	} else {
@@ -181,7 +181,7 @@ func (c *transferCommand) compareLocation(srcBucket, dstBucket string) bool {
 
 func (c *transferCommand) ensureKeyForFile(bucket, key string, fileStat os.FileInfo) (bool, error) {
 	var changed bool
-	output, err := getObjectMetadata(bucket, key, "")
+	output, err := getObjectMetadata(bucket, key, "", c.payer)
 	if err == nil {
 		changed = fileStat.Size() != output.Size || fileStat.ModTime().After(output.LastModified)
 	} else if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode >= 300 && obsError.StatusCode < 500 && obsError.StatusCode != 408 {
@@ -194,7 +194,7 @@ func (c *transferCommand) ensureKeyForFile(bucket, key string, fileStat os.FileI
 
 func (c *transferCommand) ensureKeyForFolder(bucket, key string) (bool, error) {
 	var changed bool
-	_, err := getObjectMetadata(bucket, key, "")
+	_, err := getObjectMetadata(bucket, key, "", c.payer)
 	if err == nil {
 		changed = false
 	} else if obsError, ok := err.(obs.ObsError); ok && obsError.StatusCode >= 300 && obsError.StatusCode < 500 && obsError.StatusCode != 408 {
@@ -210,6 +210,7 @@ func (c *transferCommand) abortMultipartUpload(bucket, key, uploadId string) (bo
 	input.Bucket = bucket
 	input.Key = key
 	input.UploadId = uploadId
+	input.RequestPayer = c.payer
 	output, err := obsClient.AbortMultipartUpload(input)
 	if err == nil {
 		doLog(LEVEL_INFO, "Abort multipart upload [%s] in the bucket [%s] with upload id [%s] successfully, request id [%s]", key, bucket, uploadId, output.RequestId)
@@ -230,6 +231,7 @@ func (c *transferCommand) deleteObject(bucket, key, versionId string) (string, e
 	input.Bucket = bucket
 	input.Key = key
 	input.VersionId = versionId
+	input.RequestPayer = c.payer
 	output, err := obsClient.DeleteObject(input)
 	if err == nil {
 		return output.RequestId, nil
@@ -257,6 +259,7 @@ func (c *transferCommand) setObjectMd5(bucket, key, versionId, md5Value string, 
 
 	inputMetadata[checkSumKey] = md5Value
 	input.Metadata = inputMetadata
+	input.RequestPayer = c.payer
 	output, err := obsClient.SetObjectMetadata(input)
 	if err == nil {
 		return output.RequestId, nil
@@ -719,6 +722,7 @@ func (c *transferCommand) ensureParentFolder(bucket, key string) {
 		input.Bucket = bucket
 		input.Key = current
 		input.ContentLength = 0
+		input.RequestPayer = c.payer
 		if _, err := obsClient.PutObject(input); err != nil {
 			doLogError(err, LEVEL_WARN, "Cannot create folder "+current)
 		}
@@ -741,7 +745,7 @@ func (c *transferCommand) ensureObjectAttributesByClient(bucket, key, versionId 
 	}
 
 	if srcMetaContext == nil || srcMetaContext.Metadata == nil {
-		srcMetaContext, _ = getObjectMetadataByClient(bucket, key, versionId, client)
+		srcMetaContext, _ = getObjectMetadataByClient(bucket, key, versionId, client, c.payer)
 		if versionId == "" {
 			doLog(LEVEL_WARN, "Cannot get object metadata of object [%s] in the bucket [%s]", key, bucket)
 		} else {

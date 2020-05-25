@@ -29,6 +29,7 @@ const (
 	HEADER_COPY_SOURCE_AMZ               = "x-amz-copy-source"
 	HEADER_COPY_SOURCE_RANGE_AMZ         = "x-amz-copy-source-range"
 	HEADER_VERSION_OBS                   = "x-obs-version"
+	HEADER_REQUEST_PAYER                 = "x-amz-request-payer"
 	HEADER_RANGE                         = "Range"
 	HEADER_STORAGE_CLASS                 = "x-default-storage-class"
 	HEADER_AZ_REDUNDANCY_OBS             = "x-obs-az-redundancy"
@@ -151,12 +152,13 @@ const (
 	DEFAULT_SSE_KMS_ENCRYPTION = "aws:kms"
 	DEFAULT_SSE_C_ENCRYPTION   = "AES256"
 
-	HTTP_GET     = "GET"
-	HTTP_POST    = "POST"
-	HTTP_PUT     = "PUT"
-	HTTP_DELETE  = "DELETE"
-	HTTP_HEAD    = "HEAD"
-	HTTP_OPTIONS = "OPTIONS"
+	HTTP_GET      = "GET"
+	HTTP_POST     = "POST"
+	HTTP_PUT      = "PUT"
+	HTTP_DELETE   = "DELETE"
+	HTTP_HEAD     = "HEAD"
+	HTTP_OPTIONS  = "OPTIONS"
+	REQUEST_PAYER = "request-payer"
 )
 
 type SignatureType string
@@ -745,4 +747,10 @@ const (
 	ReplaceMetadataNew MetadataDirectiveType = "REPLACE_NEW"
 	CopyMetadata       MetadataDirectiveType = "COPY"
 	ReplaceMetadata    MetadataDirectiveType = "REPLACE"
+)
+
+const (
+	BucketOwnerPayer string = "BucketOwner"
+	RequesterPayer   string = "Requester"
+	Requester        string = "requester"
 )

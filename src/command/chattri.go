@@ -60,6 +60,7 @@ func (c *chattriCommand) setBucketStorageClass(bucket string, storageClassType o
 	input := &obs.SetBucketStoragePolicyInput{}
 	input.Bucket = bucket
 	input.StorageClass = storageClassType
+	input.RequestPayer = c.payer
 	output, err := obsClient.SetBucketStoragePolicy(input)
 	if err == nil {
 		printf("Set the default storage class of bucket [%s] to [%s] successfully, request id [%s]", bucket, c.sc, output.RequestId)
@@ -87,6 +88,7 @@ func (c *chattriCommand) setObjectStorageClass(bucket, key, versionId string, st
 		input.StorageClass = storageClassType
 		input.MetadataDirective = obs.ReplaceMetadataNew
 		input.VersionId = versionId
+		input.RequestPayer = c.payer
 		if setObjectMetadataOutput, setErr := obsClient.SetObjectMetadata(input); setErr != nil {
 			err = setErr
 		} else {
@@ -150,7 +152,7 @@ func (c *chattriCommand) transGrants(acp *accessControlPolicy) []obs.Grant {
 func (c *chattriCommand) transBucketAcl(input *obs.SetBucketAclInput, acp *accessControlPolicy) {
 	ownerId := strings.TrimSpace(acp.Owner.ID)
 	if ownerId == "" {
-		if output, err := obsClient.GetBucketAcl(input.Bucket); err == nil {
+		if output, err := obsClient.GetBucketAcl(input.Bucket, obs.WithReqPaymentHeader(c.payer)); err == nil {
 			ownerId = output.Owner.ID
 		}
 	}
@@ -165,6 +167,7 @@ func (c *chattriCommand) transObjectAcl(input *obs.SetObjectAclInput, acp *acces
 		getObjectAclInput.Bucket = input.Bucket
 		getObjectAclInput.Key = input.Key
 		getObjectAclInput.VersionId = input.VersionId
+		getObjectAclInput.RequestPayer = c.payer
 		if output, err := obsClient.GetObjectAcl(getObjectAclInput); err == nil {
 			ownerId = output.Owner.ID
 		}
@@ -181,6 +184,7 @@ func (c *chattriCommand) setBucketAcl(bucket string, aclType obs.AclType, acp *a
 	} else {
 		input.ACL = aclType
 	}
+	input.RequestPayer = c.payer
 
 	output, err := obsClient.SetBucketAcl(input)
 	if err == nil {
@@ -222,6 +226,7 @@ func (c *chattriCommand) setObjectAcl(bucket, key, versionId string, aclType obs
 		} else {
 			input.ACL = aclType
 		}
+		input.RequestPayer = c.payer
 		return obsClient.SetObjectAcl(input)
 	}
 	recordHandler := func(cost int64, output *obs.BaseModel, err error) {
@@ -362,13 +367,13 @@ func initChattri() command {
 		c.flagSet.BoolVar(&c.forceRecord, "fr", false, "")
 		c.flagSet.StringVar(&c.versionId, "versionId", "", "")
 		c.flagSet.StringVar(&c.outDir, "o", "", "")
+		c.flagSet.StringVar(&c.payer, "payer", "", "")
 	}
 
 	c.action = func() error {
 		var storageClassType obs.StorageClassType
 		var aclType obs.AclType
 		var acp *accessControlPolicy
-
 		checkParamFunc := func(prefix string) bool {
 			values := []string{c.sc, c.acl, c.aclXml}
 			valuesJoin := strings.Join(values, "")
@@ -385,6 +390,11 @@ func initChattri() command {
 
 			if !invalidInput {
 				printf("Error: Invalid options, must provide only one of [sc|acl|aclXml]")
+				return false
+			}
+
+			_, ok := getRequestPayerType(c.payer)
+			if !ok {
 				return false
 			}
 
@@ -478,13 +488,13 @@ func initChattri() command {
 		printf("%2s%s\n", "", p.Sprintf("set bucket or object properties"))
 		printf("")
 		p.Printf("Syntax 1:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil chattri obs://bucket [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 2:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket/key [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil chattri obs://bucket/key [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-versionId=xxx] [-fr] [-o=xxx] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 		p.Printf("Syntax 3:")
-		printf("%2s%s", "", "obsutil chattri obs://bucket/[prefix] -r [-f] [-v] [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax())
+		printf("%2s%s", "", "obsutil chattri obs://bucket/[prefix] -r [-f] [-v] [-sc=xxx] [-acl=xxx] [-aclJson=xxx] [-o=xxx] [-j=1] [-config=xxx]"+commandCommonSyntax()+commandRequestPayerSyntax())
 		printf("")
 
 		p.Printf("Options:")
@@ -522,6 +532,7 @@ func initChattri() command {
 		printf("%4s%s", "", p.Sprintf("the path to the custom config file when running this command"))
 		printf("")
 		commandCommonHelp(p)
+		commandRequestPayerHelp(p)
 	}
 
 	return c

@@ -273,7 +273,7 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 		}
 		fileUrl := taskCtx["fileUrl"]
 
-		metaContext, err := getObjectMetadata(bucket, key, versionId)
+		metaContext, err := getObjectMetadata(bucket, key, versionId, c.payer)
 		if err != nil {
 			status, code, message, requestId := getErrorInfo(err)
 			atomic.AddInt64(totalTasks, 1)
@@ -368,9 +368,9 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 		var srcMetaContext *MetaContext
 		var err error
 		if c.crr {
-			srcMetaContext, err = c.getObjectMetadataCrr(srcBucket, srcKey, versionId)
+			srcMetaContext, err = c.getObjectMetadataCrr(srcBucket, srcKey, versionId, c.payer)
 		} else {
-			srcMetaContext, err = getObjectMetadata(srcBucket, srcKey, versionId)
+			srcMetaContext, err = getObjectMetadata(srcBucket, srcKey, versionId, c.payer)
 		}
 		if err != nil {
 			atomic.AddInt64(totalTasks, 1)

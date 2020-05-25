@@ -224,8 +224,9 @@ const (
 	c_auto                  = "auto"
 	c_waiting_caculate_md5  = "Waiting to caculate the md5 value"
 
-	c_md5   = "md5"
-	c_crc64 = "crc64"
+	c_md5       = "md5"
+	c_crc64     = "crc64"
+	c_requester = "requester"
 )
 
 var bucketAclType = map[string]obs.AclType{
@@ -259,6 +260,10 @@ var availableZoneType = map[string]obs.AvailableZoneType{
 var restoreTierType = map[string]obs.RestoreTierType{
 	c_standard:  obs.RestoreTierStandard,
 	c_expedited: obs.RestoreTierExpedited,
+}
+
+var requestPayerType = map[string]string{
+	c_requester: "requester",
 }
 
 var errAbort = errors.New("AbortError")
@@ -634,6 +639,7 @@ type cloudUrlCommand struct {
 	defaultCommand
 	emptyArgsAction    func() error
 	additionalValidate func(cloudUrl string) bool
+	payer              string
 }
 
 func (c *cloudUrlCommand) prepareCloudUrl() (cloudUrl string, err error) {
@@ -718,7 +724,7 @@ func (c *cloudUrlCommand) ensureBucket(bucket string) error {
 }
 
 func (c *cloudUrlCommand) ensureBucketByClient(bucket string, client *obs.ObsClient) error {
-	if _, err := client.GetBucketQuota(bucket); err != nil {
+	if _, err := client.GetBucketQuota(bucket, obs.WithReqPaymentHeader(c.payer)); err != nil {
 		if obsError, ok := err.(obs.ObsError); ok {
 			if status := obsError.StatusCode; status >= 300 && status < 500 && status != 404 && status != 408 {
 				return nil
@@ -732,6 +738,7 @@ func (c *cloudUrlCommand) ensureBucketByClient(bucket string, client *obs.ObsCli
 func (c *cloudUrlCommand) checkBucketFSStatus(bucket string) (string, error) {
 	input := &obs.GetBucketFSStatusInput{}
 	input.Bucket = bucket
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetBucketFSStatus(input)
 	if err != nil {
 		if obsError, ok := err.(obs.ObsError); ok {
@@ -1236,6 +1243,7 @@ func (c *recursiveCommand) checkBucketVersion(bucket string) string {
 	}
 	input := &obs.GetBucketMetadataInput{}
 	input.Bucket = bucket
+	input.RequestPayer = c.payer
 	output, err := obsClient.GetBucketMetadata(input)
 	obsVersion := OBS_VERSION_UNKNOWN
 	if err != nil {
@@ -1258,6 +1266,7 @@ func (c *recursiveCommand) submitListObjectsTask(bucket, prefix, action string,
 	input.Bucket = bucket
 	input.Prefix = prefix
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	if isSkipFunc == nil {
 		isSkipFunc = func(content obs.Content) bool {
 			return false
@@ -1319,6 +1328,7 @@ func (c *recursiveCommand) submitListVersionsTask(bucket, prefix, action string,
 	input.Bucket = bucket
 	input.Prefix = prefix
 	input.MaxKeys = defaultListMaxKeys
+	input.RequestPayer = c.payer
 	if isSkipFunc == nil {
 		isSkipFunc = func(version obs.Version) bool {
 			return false
@@ -1567,6 +1577,18 @@ func getBucketAclType(acl string) (obs.AclType, bool) {
 	return "", true
 }
 
+func getRequestPayerType(payer string) (string, bool) {
+	if payer != "" {
+		payerType, ok := requestPayerType[payer]
+		if !ok {
+			printf("Error: Invalid payer [%s], possible values are:[%s]", payer, c_requester)
+			return "", false
+		}
+		return payerType, true
+	}
+	return "", true
+}
+
 func getObjectAclType(acl string) (obs.AclType, bool) {
 	if acl != "" {
 		aclType, ok := objectAclType[acl]
@@ -1715,6 +1737,13 @@ func commandCommonSyntax() string {
 	return ""
 }
 
+func commandRequestPayerSyntax() string {
+	if assist.IsHec() {
+		return " [-payer=xxx]"
+	}
+	return ""
+}
+
 func signCommandCommonSyntax() string {
 	if assist.IsHec() {
 		return " [-i=xxx] [-k=xxx] [-t=xxx] [-endpoint=xxx]"
@@ -1727,6 +1756,14 @@ func restoreCommandCommonSyntax() string {
 		return " [-i=xxx] [-k=xxx] [-token=xxx] [-e=xxx]"
 	}
 	return ""
+}
+
+func commandRequestPayerHelp(p *i18n.PrinterWrapper) {
+	if assist.IsHec() {
+		printf("%2s%s", "", "-payer=xxx")
+		printf("%4s%s", "", p.Sprintf("request payer"))
+		printf("")
+	}
 }
 
 func commandCommonHelp(p *i18n.PrinterWrapper) {
@@ -1785,15 +1822,16 @@ type MetaContext struct {
 	Metadata                map[string]string
 }
 
-func getObjectMetadata(bucket, key, versionId string) (*MetaContext, error) {
-	return getObjectMetadataByClient(bucket, key, versionId, obsClient)
+func getObjectMetadata(bucket, key, versionId string, payer string) (*MetaContext, error) {
+	return getObjectMetadataByClient(bucket, key, versionId, obsClient, payer)
 }
 
-func getObjectMetadataByClient(bucket, key, versionId string, client *obs.ObsClient) (*MetaContext, error) {
+func getObjectMetadataByClient(bucket, key, versionId string, client *obs.ObsClient, payer string) (*MetaContext, error) {
 	input := &obs.GetObjectMetadataInput{}
 	input.Bucket = bucket
 	input.Key = key
 	input.VersionId = versionId
+	input.RequestPayer = payer
 	output, err := client.GetObjectMetadata(input)
 	if err == nil {
 		return &MetaContext{
