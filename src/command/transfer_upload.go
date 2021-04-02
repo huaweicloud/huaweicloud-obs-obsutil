@@ -1217,7 +1217,7 @@ func (c *transferCommand) getWalkFunc(bucket, dir, arcDir, folder string, linkFo
 			if !c.force && !confirm(fmt.Sprintf("Do you want upload folder [%s] to bucket [%s] ? Please input (y/n) to confirm:", path, bucket)) {
 				return nil
 			}
-			// modify by w00468571 wanghongbao, if the disableDirObject is true the dir will not upload as a object
+			// if the disableDirObject is true the dir will not upload as a object
 			if c.disableDirObject {
 				return nil
 			}
