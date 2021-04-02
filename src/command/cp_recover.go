@@ -225,7 +225,7 @@ func (c *cpCommand) recoverTask(mode cpMode, taskCtx map[string]string, metadata
 			if !c.force && !confirm(fmt.Sprintf("Do you want upload folder [%s] to bucket [%s] ? Please input (y/n) to confirm:", path, bucket)) {
 				return
 			}
-			// modify by w00468571 wanghongbao, if the disableDirObject is true the dir will not upload as a object
+			// if the disableDirObject is true the dir will not upload as a object
 			if c.disableDirObject {
 				return
 			}
